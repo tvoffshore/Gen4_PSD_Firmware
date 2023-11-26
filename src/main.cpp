@@ -4,13 +4,26 @@
 
 #include <Debug.hpp>
 #include <IIM42652.h>
+#include <SdFat.h>
 #include <SystemTime.hpp>
 
 namespace WirePin
 {
-    constexpr auto sda = GPIO_NUM_34;
-    constexpr auto scl = GPIO_NUM_33;
+    constexpr auto sda = GPIO_NUM_34; // I2C SDA pin
+    constexpr auto scl = GPIO_NUM_33; // I2C SCL pin
 } // namespace WirePin
+
+namespace SpiPin
+{
+    constexpr auto sck = GPIO_NUM_1;   // SPI clock pin
+    constexpr auto mosi = GPIO_NUM_47; // SPI MOSI pin
+    constexpr auto miso = GPIO_NUM_48; // SPI MISO pin
+} // namespace SpiPin
+
+namespace SdPin
+{
+    constexpr auto cs = GPIO_NUM_26; // SD chip select pin
+} // namespace SdPin
 
 /**
  * @brief IMU data structure
@@ -28,6 +41,9 @@ uint8_t LogsOutput::logLevelMax = LOG_LEVEL;
 
 // IMU driver object
 IIM42652 imu;
+
+// SD file system class
+SdFs sd;
 
 /**
  * @brief Move LoRa chip into sleep mode
@@ -73,6 +89,50 @@ void moveLoraToSleep()
     // Deinitialize SPI bus and slave select pin
     SPI.end();
     pinMode(LoRa_NSS, INPUT);
+}
+
+/**
+ * @brief Start SD file system class
+ *
+ * @return true if SD file system was started successfully, false otherwise
+ */
+bool startSD()
+{
+    // Maximum SPI SCK frequency
+    constexpr uint32_t maxFrequency = 20000000; // 20MHz
+    // Bytes to megabytes ratio
+    constexpr size_t sectorsToMbFactor = 2 * 1024;
+    // SD card types
+    const char *cardTypeNames[] = {"None", "MMC", "SD", "SDHC/SDXC", "Unknown"};
+
+    // Begin SPI bus
+    SPI.setBitOrder(MSBFIRST);
+    SPI.setDataMode(SPI_MODE0);
+    SPI.setFrequency(maxFrequency);
+    SPI.begin(SpiPin::sck, SpiPin::miso, SpiPin::mosi);
+
+    LOG_INFO("Start SD file system...");
+
+    bool result = sd.begin(SdPin::cs, maxFrequency);
+    if (result == true)
+    {
+        uint8_t cardType = sd.card()->type();
+        if (cardType != 0)
+        {
+            uint32_t cardSizeMb = sd.card()->sectorCount() / sectorsToMbFactor;
+            LOG_INFO("SD card initialized: type %s, size = %dMB", cardTypeNames[cardType], cardSizeMb);
+        }
+        else
+        {
+            LOG_ERROR("No SD card attached");
+        }
+    }
+    else
+    {
+        LOG_ERROR("SD card initialization failed");
+    }
+
+    return result;
 }
 
 /**
@@ -148,7 +208,7 @@ void imuTask(void *pvParameters)
         if (status == true)
         {
             LOG_TRACE("Acc X: %d, Acc Y: %d, Acc Z: %d, Gyr X: %d, Gyr Y: %d, Gyr Z: %d",
-                     imuData.accel.x, imuData.accel.y, imuData.accel.z, imuData.gyro.x, imuData.gyro.y, imuData.gyro.z);
+                      imuData.accel.x, imuData.accel.y, imuData.accel.z, imuData.gyro.x, imuData.gyro.y, imuData.gyro.z);
         }
         else
         {
@@ -183,6 +243,13 @@ void setup()
     if (status == false)
     {
         LOG_ERROR("System time initialization failed");
+    }
+
+    // Start SD file system
+    status = startSD();
+    if (status == false)
+    {
+        LOG_ERROR("SD start failed");
     }
 
     // Start accelerometer readings
