@@ -3,6 +3,7 @@
 #include <Wire.h>
 
 #include <Debug.hpp>
+#include <IIM42652.h>
 #include <SystemTime.hpp>
 
 namespace WirePin
@@ -11,10 +12,22 @@ namespace WirePin
     constexpr auto scl = GPIO_NUM_33;
 } // namespace WirePin
 
+/**
+ * @brief IMU data structure
+ */
+struct ImuData
+{
+    IIM42652_axis_t accel; // IMU accel axises
+    IIM42652_axis_t gyro;  // IMU gyro axises
+};
+
 #if (LOG_LEVEL > LOG_LEVEL_NONE)
 // Log level declaration
 uint8_t LogsOutput::logLevelMax = LOG_LEVEL;
 #endif // #if (LOG_LEVEL > LOG_LEVEL_NONE)
+
+// IMU driver object
+IIM42652 imu;
 
 /**
  * @brief Move LoRa chip into sleep mode
@@ -62,6 +75,88 @@ void moveLoraToSleep()
     pinMode(LoRa_NSS, INPUT);
 }
 
+/**
+ * @brief Initialize and start IMU sensor
+ *
+ * @return true if operations succeed, false otherwise
+ */
+bool startImu()
+{
+    // Initialize IMU sensor
+    bool result = imu.begin(Wire, 0x68);
+    if (result == true)
+    {
+        LOG_INFO("IMU initialized");
+
+        result = imu.accelerometer_enable();
+        if (result == true)
+        {
+            result = imu.gyroscope_enable();
+        }
+    }
+    else
+    {
+        LOG_ERROR("IMU initialization failed");
+    }
+
+    return result;
+}
+
+/**
+ * @brief Read IMU data
+ *
+ * @param pImuData Pointer to put IMU data
+ * @return true if reading succeed, false otherwise
+ */
+bool readImu(ImuData *pImuData)
+{
+    bool result = imu.get_accel_data(&pImuData->accel);
+    if (result == true)
+    {
+        result = imu.get_gyro_data(&pImuData->gyro);
+    }
+
+    return result;
+}
+
+/**
+ * @brief IMU samples reading task function
+ *
+ * @param pvParameters Task parameters
+ */
+void imuTask(void *pvParameters)
+{
+    TickType_t xLastWakeTime;
+    const TickType_t xFrequency = pdMS_TO_TICKS(20); // 50Hz - 20ms period
+    BaseType_t xWasDelayed;
+
+    (void *)pvParameters; // unused
+
+    // Initialise the xLastWakeTime variable with the current time.
+    xLastWakeTime = xTaskGetTickCount();
+    for (;;)
+    {
+        // Wait for the next cycle.
+        xWasDelayed = xTaskDelayUntil(&xLastWakeTime, xFrequency);
+
+        // Perform action here. xWasDelayed value can be used to determine
+        // whether a deadline was missed if the code here took too long.
+
+        // Read new IMU data
+        ImuData imuData = {0};
+        bool status = readImu(&imuData);
+        if (status == true)
+        {
+            LOG_TRACE("Acc X: %d, Acc Y: %d, Acc Z: %d, Gyr X: %d, Gyr Y: %d, Gyr Z: %d",
+                     imuData.accel.x, imuData.accel.y, imuData.accel.z, imuData.gyro.x, imuData.gyro.y, imuData.gyro.z);
+        }
+        else
+        {
+            LOG_ERROR("IMU reading failed");
+        }
+    }
+}
+
 void setup()
 {
     // Setup USB serial port for debug messages (115200 baudrate)
@@ -84,7 +179,24 @@ void setup()
     LOG_INFO("Board is powered up");
 
     // Initialize system time with RTC value
-    SystemTime::initialize(Wire);
+    bool status = SystemTime::initialize(Wire);
+    if (status == false)
+    {
+        LOG_ERROR("System time initialization failed");
+    }
+
+    // Start accelerometer readings
+    status = startImu();
+    if (status == true)
+    {
+        LOG_INFO("IMU started");
+
+        xTaskCreatePinnedToCore(imuTask, "imuTask", 4096, NULL, 1, NULL, 0);
+    }
+    else
+    {
+        LOG_ERROR("IMU start failed");
+    }
 
     LOG_INFO("Setup done");
 }
