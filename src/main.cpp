@@ -7,6 +7,9 @@
 #include <SdFat.h>
 #include <SystemTime.hpp>
 
+#include "InternalStorage.hpp"
+#include "Serial/SerialManager.hpp"
+
 namespace WirePin
 {
     constexpr auto sda = GPIO_NUM_34; // I2C SDA pin
@@ -39,11 +42,17 @@ struct ImuData
 uint8_t LogsOutput::logLevelMax = LOG_LEVEL;
 #endif // #if (LOG_LEVEL > LOG_LEVEL_NONE)
 
+// Modules settings EEPROM addresses declaration
+std::array<size_t, static_cast<size_t>(SettingsModules::Count)> InternalStorage::settingsAddressList;
+
 // IMU driver object
 IIM42652 imu;
 
 // SD file system class
 SdFs sd;
+
+// Serial manager
+Serials::SerialManager serialManager;
 
 /**
  * @brief Move LoRa chip into sleep mode
@@ -217,6 +226,48 @@ void imuTask(void *pvParameters)
     }
 }
 
+/**
+ * @brief Register serial read command handlers
+ */
+void RegisterSerialReadHandlers()
+{
+    static char dataString[Serials::SerialDevice::dataMaxLength];
+
+    LOG_DEBUG("Register serial read handlers");
+
+    serialManager.subscribeToRead(Serials::CommandId::Date,
+                                  [](const char **responseString)
+                                  {
+                                      assert(sizeof(dataString) >= sizeof(SystemTime::DateString));
+                                      SystemTime::getStringDate(dataString);
+                                      *responseString = dataString;
+                                  });
+
+    serialManager.subscribeToRead(Serials::CommandId::Time,
+                                  [](const char **responseString)
+                                  {
+                                      assert(sizeof(dataString) >= sizeof(SystemTime::TimeString));
+                                      SystemTime::getStringTime(dataString);
+                                      *responseString = dataString;
+                                  });
+}
+
+/**
+ * @brief Register serial write command handlers
+ */
+void RegisterSerialWriteHandlers()
+{
+    LOG_DEBUG("Register serial write handlers");
+
+    serialManager.subscribeToWrite(Serials::CommandId::Date,
+                                   [](const char *dataString)
+                                   { SystemTime::setStringDate(dataString); });
+
+    serialManager.subscribeToWrite(Serials::CommandId::Time,
+                                   [](const char *dataString)
+                                   { SystemTime::setStringTime(dataString); });
+}
+
 void setup()
 {
     // Setup USB serial port for debug messages (115200 baudrate)
@@ -237,6 +288,9 @@ void setup()
     digitalWrite(Vext_CTRL, LOW);
     delay(10);
     LOG_INFO("Board is powered up");
+
+    // Initialize internal storage
+    InternalStorage::initialize();
 
     // Initialize system time with RTC value
     bool status = SystemTime::initialize(Wire);
@@ -265,9 +319,23 @@ void setup()
         LOG_ERROR("IMU start failed");
     }
 
+    // Initialize serial manager
+    bool isInitialized = serialManager.initialize();
+    if (isInitialized == true)
+    {
+        RegisterSerialReadHandlers();
+        RegisterSerialWriteHandlers();
+    }
+    else
+    {
+        LOG_ERROR("Serial manager initialization failed!");
+    }
+
     LOG_INFO("Setup done");
 }
 
 void loop()
 {
+    // Receive and handle serial commands from serial devices (if available)
+    serialManager.process();
 }
