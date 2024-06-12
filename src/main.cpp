@@ -1,12 +1,19 @@
+// System headers
+#include <atomic>
+
+// Arduino headers
 #include <Arduino.h>
 #include <SPI.h>
 #include <Wire.h>
 
+// Lib headers
 #include <Debug.hpp>
+#include <Events.h>
 #include <IIM42652.h>
 #include <SdFat.h>
 #include <SystemTime.hpp>
 
+// Source headers
 #include "InternalStorage.hpp"
 #include "Serial/SerialManager.hpp"
 
@@ -23,15 +30,25 @@ namespace SpiPin
     constexpr auto miso = GPIO_NUM_48; // SPI MISO pin
 } // namespace SpiPin
 
+namespace EventBits
+{
+    constexpr EventBits_t psdSegment25 = BIT0;
+    constexpr EventBits_t psdSegment50 = BIT1;
+    constexpr EventBits_t psdSegment75 = BIT2;
+    constexpr EventBits_t psdSegmentReady = BIT3;
+
+    constexpr EventBits_t all = psdSegment25 | psdSegment50 | psdSegment75 | psdSegmentReady;
+} // namespace EventBits
+
 namespace SdPin
 {
     constexpr auto cs = GPIO_NUM_26; // SD chip select pin
 } // namespace SdPin
 
 /**
- * @brief IMU data structure
+ * @brief IMU sample structure
  */
-struct ImuData
+struct ImuSample
 {
     IIM42652_axis_t accel; // IMU accel axises
     IIM42652_axis_t gyro;  // IMU gyro axises
@@ -53,6 +70,15 @@ SdFs sd;
 
 // Serial manager
 Serials::SerialManager serialManager;
+
+// RTOS event group object
+RTOS::EventGroup eventGroup;
+
+// IMU data samples
+const size_t segmentSize = 8192;
+ImuSample imuSamples[2 * segmentSize] = {0};
+
+std::atomic<uint8_t> imuReadyPercents;
 
 /**
  * @brief Move LoRa chip into sleep mode
@@ -174,15 +200,15 @@ bool startImu()
 /**
  * @brief Read IMU data
  *
- * @param pImuData Pointer to put IMU data
+ * @param imuSample IMU sample data to read
  * @return true if reading succeed, false otherwise
  */
-bool readImu(ImuData *pImuData)
+bool readImu(ImuSample &imuSample)
 {
-    bool result = imu.get_accel_data(&pImuData->accel);
+    bool result = imu.get_accel_data(&imuSample.accel);
     if (result == true)
     {
-        result = imu.get_gyro_data(&pImuData->gyro);
+        result = imu.get_gyro_data(&imuSample.gyro);
     }
 
     return result;
@@ -199,31 +225,49 @@ void imuTask(void *pvParameters)
     const TickType_t xFrequency = pdMS_TO_TICKS(20); // 50Hz - 20ms period
     BaseType_t xWasDelayed;
 
+    size_t sampleIndex = 0;
+    ImuSample &prevSample = imuSamples[0];
+
     (void *)pvParameters; // unused
 
     // Initialise the xLastWakeTime variable with the current time.
     xLastWakeTime = xTaskGetTickCount();
-    for (;;)
-    {
-        // Wait for the next cycle.
-        xWasDelayed = xTaskDelayUntil(&xLastWakeTime, xFrequency);
+    imuReadyPercents = 0;
 
+    while (true)
+    {
         // Perform action here. xWasDelayed value can be used to determine
         // whether a deadline was missed if the code here took too long.
 
-        // Read new IMU data
-        ImuData imuData = {0};
-        bool status = readImu(&imuData);
+        ImuSample &imuSample = imuSamples[sampleIndex];
+
+        // Read new IMU sample
+        bool status = readImu(imuSample);
         if (status == true)
         {
             LOG_TRACE("Acc X: %d, Acc Y: %d, Acc Z: %d, Gyr X: %d, Gyr Y: %d, Gyr Z: %d",
-                      imuData.accel.x, imuData.accel.y, imuData.accel.z, imuData.gyro.x, imuData.gyro.y, imuData.gyro.z);
+                      imuSample.accel.x, imuSample.accel.y, imuSample.accel.z, imuSample.gyro.x, imuSample.gyro.y, imuSample.gyro.z);
+            prevSample = imuSample;
         }
         else
         {
             LOG_ERROR("IMU reading failed");
+            imuSample = prevSample;
         }
+
+        sampleIndex++;
+        if (sampleIndex >= segmentSize)
+        {
+            sampleIndex = 0;
+
+            eventGroup.set(EventBits::psdSegmentReady);
+        }
+
+        // Wait for the next cycle.
+        xWasDelayed = xTaskDelayUntil(&xLastWakeTime, xFrequency);
     }
+
+    vTaskDelete(NULL);
 }
 
 /**
@@ -268,7 +312,10 @@ void RegisterSerialWriteHandlers()
                                    { SystemTime::setStringTime(dataString); });
 }
 
-void setup()
+/**
+ * @brief Configure all interfaces and board-specific stuff
+ */
+void setupBoard()
 {
     // Setup USB serial port for debug messages (115200 baudrate)
     Serial.begin(115200);
@@ -288,6 +335,12 @@ void setup()
     digitalWrite(Vext_CTRL, LOW);
     delay(10);
     LOG_INFO("Board is powered up");
+}
+
+void setup()
+{
+    // Setup the board first
+    setupBoard();
 
     // Initialize internal storage
     InternalStorage::initialize();
@@ -338,4 +391,11 @@ void loop()
 {
     // Receive and handle serial commands from serial devices (if available)
     serialManager.process();
+
+    // Check if event occurs
+    bool isPsdSegmentReady = eventGroup.wait(EventBits::psdSegmentReady, 0);
+    if (isPsdSegmentReady == true)
+    {
+        LOG_INFO("PSD segment is ready");
+    }
 }
