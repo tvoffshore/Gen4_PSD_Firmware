@@ -15,6 +15,7 @@
 
 // Source headers
 #include "InternalStorage.hpp"
+#include "psd.h"
 #include "Serial/SerialManager.hpp"
 
 namespace WirePin
@@ -30,20 +31,17 @@ namespace SpiPin
     constexpr auto miso = GPIO_NUM_48; // SPI MISO pin
 } // namespace SpiPin
 
-namespace EventBits
-{
-    constexpr EventBits_t psdSegment25 = BIT0;
-    constexpr EventBits_t psdSegment50 = BIT1;
-    constexpr EventBits_t psdSegment75 = BIT2;
-    constexpr EventBits_t psdSegmentReady = BIT3;
-
-    constexpr EventBits_t all = psdSegment25 | psdSegment50 | psdSegment75 | psdSegmentReady;
-} // namespace EventBits
-
 namespace SdPin
 {
     constexpr auto cs = GPIO_NUM_26; // SD chip select pin
 } // namespace SdPin
+
+namespace EventBits
+{
+    constexpr EventBits_t psdSegmentReady = BIT0;
+
+    constexpr EventBits_t all = psdSegmentReady;
+} // namespace EventBits
 
 /**
  * @brief IMU sample structure
@@ -75,10 +73,14 @@ Serials::SerialManager serialManager;
 RTOS::EventGroup eventGroup;
 
 // IMU data samples
-const size_t segmentSize = 8192;
-ImuSample imuSamples[2 * segmentSize] = {0};
+const size_t segmentSizeMax = 4096;
+ImuSample imuSamples[2 * segmentSizeMax] = {0};
 
-std::atomic<uint8_t> imuReadyPercents;
+// Sampling frequency, Hz
+const size_t sampleFrequency = 50;
+
+// Interval between samples, milliseconds
+std::atomic_size_t samleIntervalMs;
 
 /**
  * @brief Move LoRa chip into sleep mode
@@ -222,7 +224,6 @@ bool readImu(ImuSample &imuSample)
 void imuTask(void *pvParameters)
 {
     TickType_t xLastWakeTime;
-    const TickType_t xFrequency = pdMS_TO_TICKS(20); // 50Hz - 20ms period
     BaseType_t xWasDelayed;
 
     size_t sampleIndex = 0;
@@ -232,7 +233,6 @@ void imuTask(void *pvParameters)
 
     // Initialise the xLastWakeTime variable with the current time.
     xLastWakeTime = xTaskGetTickCount();
-    imuReadyPercents = 0;
 
     while (true)
     {
@@ -252,11 +252,12 @@ void imuTask(void *pvParameters)
         else
         {
             LOG_ERROR("IMU reading failed");
+            // Duplicate previous sample
             imuSample = prevSample;
         }
 
         sampleIndex++;
-        if (sampleIndex >= segmentSize)
+        if (sampleIndex >= segmentSizeMax)
         {
             sampleIndex = 0;
 
@@ -264,7 +265,7 @@ void imuTask(void *pvParameters)
         }
 
         // Wait for the next cycle.
-        xWasDelayed = xTaskDelayUntil(&xLastWakeTime, xFrequency);
+        xWasDelayed = xTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(samleIntervalMs));
     }
 
     vTaskDelete(NULL);
@@ -364,6 +365,8 @@ void setup()
     if (status == true)
     {
         LOG_INFO("IMU started");
+
+        samleIntervalMs = 1000 / sampleFrequency;
 
         xTaskCreatePinnedToCore(imuTask, "imuTask", 4096, NULL, 1, NULL, 0);
     }
