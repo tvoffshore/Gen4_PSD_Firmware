@@ -19,10 +19,14 @@ namespace Serials
      */
     enum class CommandId
     {
-        SlaveAddress, // 0: Set/Get serial device slave address
-        Date,         // 1: Set/Get current date
-        Time,         // 2: Set/Get current time
-        SerialSelect, // 3: Set/Get serial interface selection
+        SlaveAddress,     // 0: Set/Get serial device slave address
+        Date,             // 1: Set/Get current date
+        Time,             // 2: Set/Get current time
+        SerialSelect,     // 3: Set/Get serial interface selection
+        MeasureFrequency, // 4: Set/Get the frequency of measurements
+        MeasureInterval,  // 5: Set/Get the interval of measurements
+        PauseInterval,    // 6: Set/Get the interval of pause between measurements
+        PointsDegree,     // 7: Set/Get the points degree to calculate PSD segment size, 2^x
 
         Commands // Total number of serial commands
     };
@@ -57,6 +61,26 @@ namespace Serials
         {
             .id = CommandId::SerialSelect,
             .string = "SERS",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::MeasureFrequency,
+            .string = "MFRQ",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::MeasureInterval,
+            .string = "MINT",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::PauseInterval,
+            .string = "PINT",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::PointsDegree,
+            .string = "PNTD",
             .accessMask = AccessMask::read | AccessMask::write,
         },
     };

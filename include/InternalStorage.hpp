@@ -11,19 +11,21 @@
  */
 enum class SettingsModules
 {
-    SerialManager,     // SerialManager settings id
+    SerialManager, // SerialManager settings id
+    Measurements,  // Measurements setting id
 
     Count // Total count of settings modules
 };
 
 namespace
 {
-// Modules settings sizes
-constexpr size_t settingsSizeList[] = {
-    6,  // SerialManager (int + uint8_t + CRC8) = 6
-};
-static_assert(sizeof(settingsSizeList) / sizeof(*settingsSizeList) == static_cast<size_t>(SettingsModules::Count),
-              "Settings size list doesn't match to modules count!");
+    // Modules settings sizes
+    constexpr size_t settingsSizeList[] = {
+        6, // SerialManager (int + uint8_t + CRC8) = 6
+        7, // Measurements (uint16_t * 2 + uint8_t * 2 + CRC8) = 7
+    };
+    static_assert(sizeof(settingsSizeList) / sizeof(*settingsSizeList) == static_cast<size_t>(SettingsModules::Count),
+                  "Settings size list doesn't match to modules count!");
 }; // namespace
 
 /**

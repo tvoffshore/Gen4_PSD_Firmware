@@ -84,7 +84,7 @@ namespace RTOS
          * @param[in] timeout Waiting timeout, OS ticks
          * @param[in] clearOnExit Clear all set events (true) or left raised (false)
          * @param[in] waitForAllBits Wait for all events to set (true) or anyone (false)
-         * @return Set events bit mask or zeto if timeout
+         * @return Set events bit mask or zero if timeout
          */
         EventBits_t wait(EventBits_t events, size_t timeout = portMAX_DELAY, BaseType_t clearOnExit = pdTRUE, BaseType_t waitForAllBits = pdFALSE)
         {
