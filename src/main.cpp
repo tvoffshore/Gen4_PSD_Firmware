@@ -19,13 +19,16 @@
 
 // Source headers
 #include "InternalStorage.hpp"
+#include "Power.h"
 #include "Psd.h"
 #include "Serial/SerialManager.hpp"
 
-// Default time to take measurements
-constexpr uint16_t measureTimeDefault = 600;
-// Default time between measurements
-constexpr uint16_t pauseTimeDefault = 300;
+// Default time to take measurements, seconds
+constexpr uint32_t measureIntervalDefault = 600;
+// Default time between measurements, seconds
+constexpr uint32_t pauseIntervalDefault = 300;
+// Jitter time of measurements interval, seconds
+constexpr uint32_t measureIntervalJitter = 5;
 
 // Default sampling frequency, Hz
 constexpr uint8_t sampleFrequencyDefault = 20;
@@ -90,10 +93,10 @@ struct ImuSample
  */
 struct MeasureSettings
 {
-    uint16_t measureTime; // Time for measuring, seconds
-    uint16_t pauseTime;   // Time between measurements, seconds
-    uint8_t frequency;    // Sampling frequency, Hz
-    uint8_t pointsDegree; // Degree of 2 to calculate segment samples count, 2^x
+    uint32_t measureInterval; // Time for measuring, seconds
+    uint32_t pauseInterval;   // Time between measurements, seconds
+    uint8_t frequency;        // Sampling frequency, Hz
+    uint8_t pointsDegree;     // Degree of 2 to calculate segment samples count, 2^x
 };
 #pragma pack(pop)
 
@@ -132,6 +135,8 @@ RTOS::EventGroup eventGroup;
 // Samples buffer
 Buffer buffer = {0};
 
+// Count of ready segments
+size_t segmentCount;
 // Size of segment, samples
 size_t segmentSize;
 // Interval between IMU samples, milliseconds
@@ -142,14 +147,13 @@ PSD psdAccX;
 
 // Measurements settings
 MeasureSettings measureSettings = {
-    .measureTime = measureTimeDefault,
-    .pauseTime = pauseTimeDefault,
+    .measureInterval = measureIntervalDefault,
+    .pauseInterval = pauseIntervalDefault,
     .frequency = sampleFrequencyDefault,
     .pointsDegree = pointsDegreeDefault,
 };
 
 // Functions prototypes
-void moveLoraToSleep();
 bool setupSD();
 bool setupImu();
 bool readImu(ImuSample &imuSample);
@@ -160,49 +164,14 @@ void setupPSD(uint8_t sampleCount, uint8_t sampleFrequency);
 void imuTask(void *pvParameters);
 
 /**
- * @brief Move LoRa chip into sleep mode
+ * @brief Convert seconds to milliseconds
+ *
+ * @param seconds Time in seconds
+ * @return Milliseconds
  */
-void moveLoraToSleep()
+constexpr size_t secondsToMillis(size_t seconds)
 {
-    // Initialize SPI bus and slave select pin to communicate with LoRa chip
-    SPI.end();
-    SPI.setBitOrder(MSBFIRST);
-    SPI.setDataMode(SPI_MODE0);
-    SPI.setFrequency(2000000);
-    SPI.begin(LoRa_SCK, LoRa_MISO, LoRa_MOSI);
-    pinMode(LoRa_NSS, OUTPUT);
-
-    // Wake up LoRa chip
-    digitalWrite(LoRa_NSS, LOW);
-    SPI.transfer(0xC0);
-    SPI.transfer(0);
-    digitalWrite(LoRa_NSS, HIGH);
-
-    // Wait until LoRa chip is ready
-    size_t timeoutMs = 1000;
-    pinMode(LoRa_BUSY, INPUT);
-    while (digitalRead(LoRa_BUSY))
-    {
-        delay(1);
-        timeoutMs--;
-        if (timeoutMs == 0)
-        {
-            LOG_ERROR("Waiting LoRa ready failed");
-            return;
-        }
-    }
-
-    // Move LoRa chip into sleep mode
-    digitalWrite(LoRa_NSS, LOW);
-    SPI.transfer(0x84);
-    SPI.transfer(0);
-    digitalWrite(LoRa_NSS, HIGH);
-
-    delay(2);
-
-    // Deinitialize SPI bus and slave select pin
-    SPI.end();
-    pinMode(LoRa_NSS, INPUT);
+    return seconds * 1000;
 }
 
 /**
@@ -355,6 +324,22 @@ void RegisterSerialReadHandlers()
                                       *responseString = dataString;
                                   });
 
+    serialManager.subscribeToRead(Serials::CommandId::MeasureInterval,
+                                  [](const char **responseString)
+                                  {
+                                      snprintf(dataString, sizeof(dataString), "%u", measureSettings.measureInterval);
+
+                                      *responseString = dataString;
+                                  });
+
+    serialManager.subscribeToRead(Serials::CommandId::PauseInterval,
+                                  [](const char **responseString)
+                                  {
+                                      snprintf(dataString, sizeof(dataString), "%u", measureSettings.pauseInterval);
+
+                                      *responseString = dataString;
+                                  });
+
     serialManager.subscribeToRead(Serials::CommandId::PointsDegree,
                                   [](const char **responseString)
                                   {
@@ -411,6 +396,26 @@ void RegisterSerialWriteHandlers()
                                        startImuTask();
                                    });
 
+    serialManager.subscribeToWrite(Serials::CommandId::MeasureInterval,
+                                   [](const char *dataString)
+                                   {
+                                       uint32_t value = atoi(dataString);
+
+                                       // Update measure interval setting
+                                       measureSettings.measureInterval = value;
+                                       InternalStorage::updateSettings(measureSettingsId, measureSettings);
+                                   });
+
+    serialManager.subscribeToWrite(Serials::CommandId::PauseInterval,
+                                   [](const char *dataString)
+                                   {
+                                       uint32_t value = atoi(dataString);
+
+                                       // Update pause interval setting
+                                       measureSettings.pauseInterval = value;
+                                       InternalStorage::updateSettings(measureSettingsId, measureSettings);
+                                   });
+
     serialManager.subscribeToWrite(Serials::CommandId::PointsDegree,
                                    [](const char *dataString)
                                    {
@@ -451,18 +456,12 @@ void setupBoard()
     // Setup I2C interface to communicate with IMU, RTC (100kHz frequency)
     Wire.begin(WirePin::sda, WirePin::scl, 100000);
 
-    // Set LoRa chip into sleep mode
-    moveLoraToSleep();
+    // Setup board power
+    Power::setup();
 
     // Turn off build-in LED (LOW - off, HIGH - on)
     pinMode(BUILTIN_LED, OUTPUT);
     digitalWrite(BUILTIN_LED, LOW);
-
-    // Power up the board (LOW - power up, HIGH - power down)
-    pinMode(Vext_CTRL, OUTPUT);
-    digitalWrite(Vext_CTRL, LOW);
-    delay(10);
-    LOG_INFO("Board is powered up");
 }
 
 /**
@@ -478,6 +477,7 @@ void setupPSD(uint8_t pointsDegree, uint8_t sampleFrequency)
     assert(pointsDegree >= pointsDegreeMin && pointsDegree <= pointsDegreeMax);
     assert(sampleFrequency >= sampleFrequencyMin && sampleFrequency <= sampleFrequencyMax);
 
+    segmentCount = 0;
     segmentSize = pow2[pointsDegree];
     imuIntervalMs = millisPerSecond / sampleFrequency;
 
@@ -557,8 +557,6 @@ void setup()
 
 void loop()
 {
-    static size_t segmentCount = 0;
-
     // Receive and handle serial commands from serial devices (if available)
     serialManager.process();
 
@@ -569,14 +567,18 @@ void loop()
         size_t segmentIndex = (events & EventBits::segment0Ready) ? 0 : 1;
 
         LOG_INFO("PSD segment %d is ready (index %d)", segmentCount, segmentIndex);
+        segmentCount++;
 
         const int16_t *pSamples = &buffer.accX[segmentIndex * segmentSize];
         psdAccX.computeSegment(pSamples);
 
-        segmentCount++;
-        if (segmentCount == 2)
+        size_t segmentTimeMs = segmentSize * imuIntervalMs;
+        size_t measureTimeMs = segmentCount * segmentTimeMs;
+        // Check if there is enough time to take the next segment
+        if (measureTimeMs + segmentTimeMs > secondsToMillis(measureSettings.measureInterval + measureIntervalJitter))
         {
-            segmentCount = 0;
+            LOG_DEBUG("Measure time %d ms + segment time %d ms > measure interval %u sec + interval jitter %d sec",
+                      measureTimeMs, segmentTimeMs, measureSettings.measureInterval, measureIntervalJitter);
 
             double *result = psdAccX.getResult();
 
@@ -587,6 +589,10 @@ void loop()
                 LOG_INFO("%lf: %lf", freq, result[idx]);
                 freq += deltaFreq;
             }
+
+            delay(100);
+
+            Power::deepSleep(measureSettings.pauseInterval);
         }
     }
 }
@@ -603,7 +609,7 @@ void imuTask(void *pvParameters)
 
     ImuSample imuSample = {0};
     ImuSample prevSample = imuSample;
-    
+
     size_t segmentIndex = 0;
     size_t sampleIndex = 0;
 

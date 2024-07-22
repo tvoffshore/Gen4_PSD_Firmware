@@ -13,6 +13,7 @@ namespace Serials
      */
     class Max3221 : public SerialInterface
     {
+    public:
         // Serial RX pin
         static constexpr auto pinRx = GPIO_NUM_18;
         // Serial TX pin
@@ -23,7 +24,6 @@ namespace Serials
         // Baud rate for serial device
         static constexpr size_t serialBaudrate = 9600;
 
-    public:
         /**
          * @brief Construct a new Max3221 object
          */

@@ -13,6 +13,7 @@ namespace Serials
      */
     class St3485 : public SerialInterface
     {
+    public:
         // Serial Rx pin
         static constexpr auto pinRx = GPIO_NUM_18;
         // Serial Tx Pin
@@ -25,7 +26,6 @@ namespace Serials
         // Baud rate for serial device
         static constexpr size_t serialBaudrate = 9600;
 
-    public:
         /**
          * @brief Construct a new St3485 object
          */
@@ -125,4 +125,3 @@ namespace Serials
         HardwareSerial &_serial; ///< Reference to uart hardware serial interface object
     };
 } // namespace Serials
-
