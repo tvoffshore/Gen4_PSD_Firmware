@@ -26,7 +26,8 @@ namespace Serials
         MeasureFrequency, // 4: Set/Get the frequency of measurements
         MeasureInterval,  // 5: Set/Get the interval of measurements
         PauseInterval,    // 6: Set/Get the interval of pause between measurements
-        PointsDegree,     // 7: Set/Get the points degree to calculate PSD segment size, 2^x
+        PointsPsd,        // 7: Set/Get the points to calculate PSD segment size, 2^x
+        PointsCutoff,     // 8: Set/Get the points to store the PSD results
 
         Commands // Total number of serial commands
     };
@@ -79,8 +80,13 @@ namespace Serials
             .accessMask = AccessMask::read | AccessMask::write,
         },
         {
-            .id = CommandId::PointsDegree,
-            .string = "PNTD",
+            .id = CommandId::PointsPsd,
+            .string = "PPSD",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::PointsCutoff,
+            .string = "PCUT",
             .accessMask = AccessMask::read | AccessMask::write,
         },
     };

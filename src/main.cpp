@@ -37,12 +37,19 @@ constexpr uint8_t sampleFrequencyMin = 1;
 // Maximum sampling frequency, Hz
 constexpr uint8_t sampleFrequencyMax = 100;
 
-// Default points degree to calculate PSD segment size
-constexpr uint8_t pointsDegreeDefault = 8;
-// Minimum points degree
-constexpr uint8_t pointsDegreeMin = 2;
-// Maximum points degree
-constexpr uint8_t pointsDegreeMax = 10;
+// Default points to calculate PSD segment size, 2^x
+constexpr uint8_t pointsPsdDefault = 8;
+// Minimum points to calculate PSD segment size, 2^x
+constexpr uint8_t pointsPsdMin = 2;
+// Maximum points to calculate PSD segment size, 2^x
+constexpr uint8_t pointsPsdMax = 10;
+
+// Default points to store the PSD results
+constexpr uint16_t pointsCutoffDefault = 128;
+// Minimum points to store the PSD results
+constexpr uint16_t pointsCutoffMin = 1;
+// Maximum points to store the PSD results
+constexpr uint16_t pointsCutoffMax = 1024;
 
 // Milliseconds per second
 constexpr size_t millisPerSecond = 1000;
@@ -72,10 +79,11 @@ namespace EventBits
     constexpr EventBits_t startImu = BIT0;
     constexpr EventBits_t stopImu = BIT1;
     constexpr EventBits_t imuIdle = BIT2;
-    constexpr EventBits_t segment0Ready = BIT3;
-    constexpr EventBits_t segment1Ready = BIT4;
+    constexpr EventBits_t imuRunning = BIT3;
+    constexpr EventBits_t segment0Ready = BIT4;
+    constexpr EventBits_t segment1Ready = BIT5;
 
-    constexpr EventBits_t all = startImu | stopImu | imuIdle | segment0Ready | segment1Ready;
+    constexpr EventBits_t all = startImu | stopImu | imuIdle | imuRunning | segment0Ready | segment1Ready;
 } // namespace EventBits
 
 /**
@@ -95,8 +103,9 @@ struct MeasureSettings
 {
     uint32_t measureInterval; // Time for measuring, seconds
     uint32_t pauseInterval;   // Time between measurements, seconds
+    uint16_t pointsCutoff;    // Points to store the PSD results
     uint8_t frequency;        // Sampling frequency, Hz
-    uint8_t pointsDegree;     // Degree of 2 to calculate segment samples count, 2^x
+    uint8_t pointsPsd;        // Points to calculate PSD segment size, 2^x
 };
 #pragma pack(pop)
 
@@ -149,8 +158,9 @@ PSD psdAccX;
 MeasureSettings measureSettings = {
     .measureInterval = measureIntervalDefault,
     .pauseInterval = pauseIntervalDefault,
+    .pointsCutoff = pointsCutoffDefault,
     .frequency = sampleFrequencyDefault,
-    .pointsDegree = pointsDegreeDefault,
+    .pointsPsd = pointsPsdDefault,
 };
 
 // Functions prototypes
@@ -229,8 +239,6 @@ bool setupImu()
     bool result = imu.begin(Wire, 0x68);
     if (result == true)
     {
-        LOG_INFO("IMU initialized");
-
         result = imu.accelerometer_enable();
         if (result == true)
         {
@@ -267,8 +275,17 @@ bool readImu(ImuSample &imuSample)
  */
 void startImuTask()
 {
+    LOG_INFO("Start IMU task");
+
     // Start IMU sampling
     eventGroup.set(EventBits::startImu);
+
+    // Wait IMU task is idle
+    EventBits_t events = eventGroup.wait(EventBits::imuRunning);
+    if (!(events & EventBits::imuRunning))
+    {
+        LOG_ERROR("IMU task start failed");
+    }
 }
 
 /**
@@ -276,6 +293,8 @@ void startImuTask()
  */
 void stopImuTask()
 {
+    LOG_INFO("Stop IMU task");
+
     // Stop IMU sampling
     eventGroup.set(EventBits::stopImu);
 
@@ -283,7 +302,7 @@ void stopImuTask()
     EventBits_t events = eventGroup.wait(EventBits::imuIdle);
     if (!(events & EventBits::imuIdle))
     {
-        LOG_ERROR("IMU stop failed");
+        LOG_ERROR("IMU task stop failed");
     }
 }
 
@@ -340,10 +359,18 @@ void RegisterSerialReadHandlers()
                                       *responseString = dataString;
                                   });
 
-    serialManager.subscribeToRead(Serials::CommandId::PointsDegree,
+    serialManager.subscribeToRead(Serials::CommandId::PointsPsd,
                                   [](const char **responseString)
                                   {
-                                      snprintf(dataString, sizeof(dataString), "%u", measureSettings.pointsDegree);
+                                      snprintf(dataString, sizeof(dataString), "%u", measureSettings.pointsPsd);
+
+                                      *responseString = dataString;
+                                  });
+
+    serialManager.subscribeToRead(Serials::CommandId::PointsCutoff,
+                                  [](const char **responseString)
+                                  {
+                                      snprintf(dataString, sizeof(dataString), "%u", measureSettings.pointsCutoff);
 
                                       *responseString = dataString;
                                   });
@@ -390,7 +417,7 @@ void RegisterSerialWriteHandlers()
                                        InternalStorage::updateSettings(measureSettingsId, measureSettings);
 
                                        // Restart PSD measurements
-                                       setupPSD(measureSettings.pointsDegree, measureSettings.frequency);
+                                       setupPSD(measureSettings.pointsPsd, measureSettings.frequency);
 
                                        // Start IMU sampling
                                        startImuTask();
@@ -416,32 +443,51 @@ void RegisterSerialWriteHandlers()
                                        InternalStorage::updateSettings(measureSettingsId, measureSettings);
                                    });
 
-    serialManager.subscribeToWrite(Serials::CommandId::PointsDegree,
+    serialManager.subscribeToWrite(Serials::CommandId::PointsPsd,
                                    [](const char *dataString)
                                    {
                                        uint8_t value = atoi(dataString);
 
-                                       if (value < pointsDegreeMin)
+                                       if (value < pointsPsdMin)
                                        {
-                                           value = pointsDegreeMin;
+                                           value = pointsPsdMin;
                                        }
-                                       else if (value > pointsDegreeMax)
+                                       else if (value > pointsPsdMax)
                                        {
-                                           value = pointsDegreeMax;
+                                           value = pointsPsdMax;
                                        }
 
                                        // Stop IMU sampling
                                        stopImuTask();
 
-                                       // Update measure frequency setting
-                                       measureSettings.pointsDegree = value;
+                                       // Update points to calculate PSD segment size
+                                       measureSettings.pointsPsd = value;
                                        InternalStorage::updateSettings(measureSettingsId, measureSettings);
 
                                        // Restart PSD measurements
-                                       setupPSD(measureSettings.pointsDegree, measureSettings.frequency);
+                                       setupPSD(measureSettings.pointsPsd, measureSettings.frequency);
 
                                        // Start IMU sampling
                                        startImuTask();
+                                   });
+
+    serialManager.subscribeToWrite(Serials::CommandId::PointsCutoff,
+                                   [](const char *dataString)
+                                   {
+                                       uint16_t value = atoi(dataString);
+
+                                       if (value < pointsCutoffMin)
+                                       {
+                                           value = pointsCutoffMin;
+                                       }
+                                       else if (value > pointsCutoffMax)
+                                       {
+                                           value = pointsCutoffMax;
+                                       }
+
+                                       // Update measure frequency setting
+                                       measureSettings.pointsCutoff = value;
+                                       InternalStorage::updateSettings(measureSettingsId, measureSettings);
                                    });
 }
 
@@ -467,18 +513,18 @@ void setupBoard()
 /**
  * @brief Setup PSD measurements
  *
- * @param pointsDegree
- * @param sampleFrequency
+ * @param[in] pointsPsd Points to calculate PSD segment size, 2^x
+ * @param[in] sampleFrequency Sampling frequency, Hz
  */
-void setupPSD(uint8_t pointsDegree, uint8_t sampleFrequency)
+void setupPSD(uint8_t pointsPsd, uint8_t sampleFrequency)
 {
     static const size_t pow2[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192};
 
-    assert(pointsDegree >= pointsDegreeMin && pointsDegree <= pointsDegreeMax);
+    assert(pointsPsd >= pointsPsdMin && pointsPsd <= pointsPsdMax);
     assert(sampleFrequency >= sampleFrequencyMin && sampleFrequency <= sampleFrequencyMax);
 
     segmentCount = 0;
-    segmentSize = pow2[pointsDegree];
+    segmentSize = pow2[pointsPsd];
     imuIntervalMs = millisPerSecond / sampleFrequency;
 
     LOG_INFO("PSD setup: segment size %u samples, sample time %u ms", segmentSize, imuIntervalMs);
@@ -486,6 +532,9 @@ void setupPSD(uint8_t pointsDegree, uint8_t sampleFrequency)
     psdAccX.setup(segmentSize, sampleFrequency);
 }
 
+/**
+ * @brief Setup preliminary stuff before starting the main loop
+ */
 void setup()
 {
     // Setup the board first
@@ -502,6 +551,18 @@ void setup()
     if (status == false)
     {
         LOG_ERROR("System time initialization failed");
+    }
+
+    // Initialize serial manager
+    status = serialManager.initialize();
+    if (status == true)
+    {
+        RegisterSerialReadHandlers();
+        RegisterSerialWriteHandlers();
+    }
+    else
+    {
+        LOG_ERROR("Serial manager initialization failed!");
     }
 
     // Start SD file system
@@ -523,9 +584,9 @@ void setup()
         EventBits_t events = eventGroup.wait(EventBits::imuIdle);
         if (events & EventBits::imuIdle)
         {
-            LOG_INFO("IMU task is ready");
+            LOG_INFO("IMU task created");
 
-            setupPSD(measureSettings.pointsDegree, measureSettings.frequency);
+            setupPSD(measureSettings.pointsPsd, measureSettings.frequency);
 
             // Start IMU sampling
             startImuTask();
@@ -540,21 +601,12 @@ void setup()
         LOG_ERROR("IMU initialization failed");
     }
 
-    // Initialize serial manager
-    bool isInitialized = serialManager.initialize();
-    if (isInitialized == true)
-    {
-        RegisterSerialReadHandlers();
-        RegisterSerialWriteHandlers();
-    }
-    else
-    {
-        LOG_ERROR("Serial manager initialization failed!");
-    }
-
     LOG_INFO("Setup done");
 }
 
+/**
+ * @brief The main loop function
+ */
 void loop()
 {
     // Receive and handle serial commands from serial devices (if available)
@@ -580,17 +632,28 @@ void loop()
             LOG_DEBUG("Measure time %d ms + segment time %d ms > measure interval %u sec + interval jitter %d sec",
                       measureTimeMs, segmentTimeMs, measureSettings.measureInterval, measureIntervalJitter);
 
+            // Stop IMU sampling
+            stopImuTask();
+
+            // If 𝑁 is even (segmentSize = 2^x), you have 𝑁/2+1 useful components
+            // because the symmetric part of the FFT spectrum for real-valued signals
+            // does not provide additional information beyond the Nyquist frequency
+            size_t resultPoints = segmentSize / 2 + 1;
+            if (resultPoints > measureSettings.pointsCutoff)
+            {
+                // Limit result points
+                resultPoints = measureSettings.pointsCutoff;
+            }
+
             double *result = psdAccX.getResult();
 
             double deltaFreq = static_cast<double>(measureSettings.frequency) / segmentSize;
             double freq = 0;
-            for (size_t idx = 0; idx < segmentSize / 2 + 1; idx++)
+            for (size_t idx = 0; idx < resultPoints; idx++)
             {
                 LOG_INFO("%lf: %lf", freq, result[idx]);
                 freq += deltaFreq;
             }
-
-            delay(100);
 
             Power::deepSleep(measureSettings.pauseInterval);
         }
@@ -617,7 +680,7 @@ void imuTask(void *pvParameters)
 
     while (1)
     {
-        LOG_INFO("Stop IMU task");
+        LOG_INFO("IMU task idle");
 
         // Report IMU is in IDLE state
         eventGroup.set(EventBits::imuIdle);
@@ -625,7 +688,10 @@ void imuTask(void *pvParameters)
         // Wait for start event
         EventBits_t events = eventGroup.wait(EventBits::startImu);
 
-        LOG_INFO("Start IMU task");
+        LOG_INFO("IMU task running");
+
+        // Report IMU is in IDLE state
+        eventGroup.set(EventBits::imuRunning);
 
         // Reset segment and sample index
         segmentIndex = 0;

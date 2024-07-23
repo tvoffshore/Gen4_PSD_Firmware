@@ -22,7 +22,7 @@ namespace
     // Modules settings sizes
     constexpr size_t settingsSizeList[] = {
         6,  // SerialManager (int + uint8_t + CRC8) = 6
-        11, // Measurements (uint32_t * 2 + uint8_t * 2 + CRC8) = 11
+        13, // Measurements (uint32_t * 2 + uint16_t + uint8_t * 2 + CRC8) = 13
     };
     static_assert(sizeof(settingsSizeList) / sizeof(*settingsSizeList) == static_cast<size_t>(SettingsModules::Count),
                   "Settings size list doesn't match to modules count!");
