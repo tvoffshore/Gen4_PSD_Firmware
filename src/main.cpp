@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 // Arduino headers
 #include <Arduino.h>
@@ -18,6 +19,7 @@
 #include <SystemTime.hpp>
 
 // Source headers
+#include "FileSD.hpp"
 #include "InternalStorage.hpp"
 #include "Power.h"
 #include "Psd.h"
@@ -68,11 +70,6 @@ namespace SpiPin
     constexpr auto mosi = GPIO_NUM_47; // SPI MOSI pin
     constexpr auto miso = GPIO_NUM_48; // SPI MISO pin
 } // namespace SpiPin
-
-namespace SdPin
-{
-    constexpr auto cs = GPIO_NUM_26; // SD chip select pin
-} // namespace SdPin
 
 namespace EventBits
 {
@@ -192,38 +189,15 @@ constexpr size_t secondsToMillis(size_t seconds)
 bool setupSD()
 {
     // Maximum SPI SCK frequency
-    constexpr uint32_t maxFrequency = 20000000; // 20MHz
-    // Bytes to megabytes ratio
-    constexpr size_t sectorsToMbFactor = 2 * 1024;
-    // SD card types
-    const char *cardTypeNames[] = {"None", "MMC", "SD", "SDHC/SDXC", "Unknown"};
+    constexpr uint32_t spiFrequency = 20000000; // 20MHz
 
     // Begin SPI bus
     SPI.setBitOrder(MSBFIRST);
     SPI.setDataMode(SPI_MODE0);
-    SPI.setFrequency(maxFrequency);
+    SPI.setFrequency(spiFrequency);
     SPI.begin(SpiPin::sck, SpiPin::miso, SpiPin::mosi);
 
-    LOG_INFO("Start SD file system...");
-
-    bool result = sd.begin(SdPin::cs, maxFrequency);
-    if (result == true)
-    {
-        uint8_t cardType = sd.card()->type();
-        if (cardType != 0)
-        {
-            uint32_t cardSizeMb = sd.card()->sectorCount() / sectorsToMbFactor;
-            LOG_INFO("SD card initialized: type %s, size = %dMB", cardTypeNames[cardType], cardSizeMb);
-        }
-        else
-        {
-            LOG_ERROR("No SD card attached");
-        }
-    }
-    else
-    {
-        LOG_ERROR("SD card initialization failed");
-    }
+    bool result = FileSD::startFileSystem(spiFrequency);
 
     return result;
 }
@@ -533,6 +507,45 @@ void setupPSD(uint8_t pointsPsd, uint8_t sampleFrequency)
 }
 
 /**
+ * @brief Save PSD results to the storage
+ */
+void savePSD()
+{
+    // If 𝑁 is even (segmentSize = 2^x), you have 𝑁/2+1 useful components
+    // because the symmetric part of the FFT spectrum for real-valued signals
+    // does not provide additional information beyond the Nyquist frequency
+    size_t resultPoints = segmentSize / 2 + 1;
+    if (resultPoints > measureSettings.pointsCutoff)
+    {
+        // Limit result points
+        resultPoints = measureSettings.pointsCutoff;
+    }
+
+    double *resultAccX = psdAccX.getResult();
+
+    SystemTime::TimestampString timestamp;
+    SystemTime::getTimestamp(timestamp);
+    char filename[50];
+    snprintf(filename, sizeof(filename), "AccX_%s", timestamp);
+    FileSD _file;
+    _file.create("PSD", filename);
+    bool isOpen = _file.open();
+    if (isOpen == true)
+    {
+        _file.write(resultAccX, sizeof(*resultAccX) * resultPoints);
+        _file.close();
+    }
+
+    double deltaFreq = static_cast<double>(measureSettings.frequency) / segmentSize;
+    double freq = 0;
+    for (size_t idx = 0; idx < resultPoints; idx++)
+    {
+        LOG_INFO("%lf: %lf", freq, resultAccX[idx]);
+        freq += deltaFreq;
+    }
+}
+
+/**
  * @brief Setup preliminary stuff before starting the main loop
  */
 void setup()
@@ -635,25 +648,10 @@ void loop()
             // Stop IMU sampling
             stopImuTask();
 
-            // If 𝑁 is even (segmentSize = 2^x), you have 𝑁/2+1 useful components
-            // because the symmetric part of the FFT spectrum for real-valued signals
-            // does not provide additional information beyond the Nyquist frequency
-            size_t resultPoints = segmentSize / 2 + 1;
-            if (resultPoints > measureSettings.pointsCutoff)
-            {
-                // Limit result points
-                resultPoints = measureSettings.pointsCutoff;
-            }
+            // Save PSD results to the storage
+            savePSD();
 
-            double *result = psdAccX.getResult();
-
-            double deltaFreq = static_cast<double>(measureSettings.frequency) / segmentSize;
-            double freq = 0;
-            for (size_t idx = 0; idx < resultPoints; idx++)
-            {
-                LOG_INFO("%lf: %lf", freq, result[idx]);
-                freq += deltaFreq;
-            }
+            FileSD::stopFileSystem();
 
             Power::deepSleep(measureSettings.pauseInterval);
         }

@@ -1,3 +1,14 @@
+/**
+ * @file InternalStorage.hpp
+ * @author Mikhail Kalina (apollo.mk58@gmail.com)
+ * @brief Internal non-volatile storage module
+ * @version 0.1
+ * @date 2024-05-23
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 #pragma once
 
 #include <array>
