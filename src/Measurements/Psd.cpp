@@ -15,8 +15,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "arduinoFFT.h"
-#include "Debug.hpp"
+#include <arduinoFFT.h>
+#include <Debug.hpp>
 
 using namespace Measurements;
 
@@ -64,7 +64,7 @@ namespace
 void PSD::setup(size_t sampleCount, size_t sampleFrequency)
 {
     assert(sampleCount < samplesCountMax);
-    
+
     // Save samples count
     _sampleCount = sampleCount;
     // Save sampling frequency
