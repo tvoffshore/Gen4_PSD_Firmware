@@ -19,6 +19,7 @@
 #include <SystemTime.hpp>
 
 // Source headers
+#include "Battery.hpp"
 #include "FileSD.hpp"
 #include "InternalStorage.hpp"
 #include "Measurements/Psd.h"
@@ -171,6 +172,9 @@ Measurements::Statistic<int16_t> statisticAccZ;
 Measurements::Statistic<int16_t> statisticGyroX;
 Measurements::Statistic<int16_t> statisticGyroY;
 Measurements::Statistic<int16_t> statisticGyroZ;
+
+// Start measurements date and time
+SystemTime::DateTime startDateTime;
 
 // Measurements settings
 MeasureSettings measureSettings = {
@@ -603,6 +607,9 @@ void setupBoard()
     // Setup board power
     Power::setup();
 
+    // Initialize battery controller
+    Battery::Controller::initialize();
+
     // Turn off build-in LED (LOW - off, HIGH - on)
     pinMode(BUILTIN_LED, OUTPUT);
     digitalWrite(BUILTIN_LED, LOW);
@@ -621,23 +628,31 @@ void setupMeasurements(uint8_t pointsPsd, uint8_t sampleFrequency)
     assert(pointsPsd >= pointsPsdMin && pointsPsd <= pointsPsdMax);
     assert(sampleFrequency >= sampleFrequencyMin && sampleFrequency <= sampleFrequencyMax);
 
+    // Reset count of ready segments
     segmentCount = 0;
+    // Determine segment size
     segmentSize = pow2[pointsPsd];
+    // Calculate interval between IMU samples
     imuIntervalMs = millisPerSecond / sampleFrequency;
 
     LOG_INFO("PSD setup: segment size %u samples, sample time %u ms", segmentSize, imuIntervalMs);
 
+    // Setup PSD measurements
     psdAccX.setup(segmentSize, sampleFrequency);
     psdAccY.setup(segmentSize, sampleFrequency);
     psdGyroX.setup(segmentSize, sampleFrequency);
     psdGyroY.setup(segmentSize, sampleFrequency);
 
+    // Reset measurements statistic
     statisticAccX.reset();
     statisticAccY.reset();
     statisticAccZ.reset();
     statisticGyroX.reset();
     statisticGyroY.reset();
     statisticGyroZ.reset();
+
+    // Obtain measurements start date and time
+    SystemTime::getDateTime(startDateTime);
 }
 
 /**
@@ -665,17 +680,31 @@ void saveMeasurements()
     const double *resultPsdGyroX = psdGyroX.getResult(&coreBinGyroX);
     const double *resultPsdGyroY = psdGyroY.getResult(&coreBinGyroY);
 
+    Battery::Status batteryStatus = Battery::Controller::readStatus();
+
     SystemTime::TimestampString timestamp;
     SystemTime::getTimestamp(timestamp);
-    char filename[50];
-    snprintf(filename, sizeof(filename), "%s", timestamp);
-    FileSD _file;
-    _file.create("PSD", filename);
 
+    FileSD _file;
+    _file.create("PSD", timestamp);
     bool isOpen = _file.open();
     if (isOpen == true)
     {
         char string[100];
+
+        // File header
+        float batteryVoltage = static_cast<float>(batteryStatus.voltage) / 1000;
+        snprintf(string, sizeof(string), "BATT %.1fV", batteryVoltage);
+        _file.println(string);
+        snprintf(string, sizeof(string), "BATT %u%%", batteryStatus.level);
+        _file.println(string);
+        snprintf(string, sizeof(string), "START_TIME %u/%u/%u %u:%u:%u",
+                 startDateTime.Day, startDateTime.Month, startDateTime.Year,
+                 startDateTime.Hour, startDateTime.Minute, startDateTime.Second);
+        _file.println(string);
+        snprintf(string, sizeof(string), "Logging Rate,%u", measureSettings.frequency);
+        _file.println(string);
+        _file.println(""); // End of header
 
         _file.println("Channel Name,ACC_X");
         _file.println("Channel Units,m/s^2");
@@ -696,8 +725,8 @@ void saveMeasurements()
             snprintf(string, sizeof(string), ",%G", resultPsdAccX[idx]);
             _file.print(string);
         }
-        _file.println("");
-        _file.println("");
+        _file.println(""); // End of PSD
+        _file.println(""); // End of channel
 
         _file.println("Channel Name,ACC_Y");
         _file.println("Channel Units,m/s^2");
@@ -718,8 +747,8 @@ void saveMeasurements()
             snprintf(string, sizeof(string), ",%G", resultPsdAccY[idx]);
             _file.print(string);
         }
-        _file.println("");
-        _file.println("");
+        _file.println(""); // End of PSD
+        _file.println(""); // End of channel
 
         _file.println("Channel Name,ACC_Z");
         _file.println("Channel Units,m/s^2");
@@ -731,7 +760,7 @@ void saveMeasurements()
         _file.println(string);
         snprintf(string, sizeof(string), "Standard Deviation,%G", rawAccelToMs2(statisticAccZ.deviation()));
         _file.println(string);
-        _file.println("");
+        _file.println(""); // End of channel
 
         _file.println("Channel Name,GYRO_X");
         _file.println("Channel Units,rad/s");
@@ -752,8 +781,8 @@ void saveMeasurements()
             snprintf(string, sizeof(string), ",%G", resultPsdGyroX[idx]);
             _file.print(string);
         }
-        _file.println("");
-        _file.println("");
+        _file.println(""); // End of PSD
+        _file.println(""); // End of channel
 
         _file.println("Channel Name,GYRO_Y");
         _file.println("Channel Units,rad/s");
@@ -774,8 +803,8 @@ void saveMeasurements()
             snprintf(string, sizeof(string), ",%G", resultPsdGyroY[idx]);
             _file.print(string);
         }
-        _file.println("");
-        _file.println("");
+        _file.println(""); // End of PSD
+        _file.println(""); // End of channel
 
         _file.println("Channel Name,GYRO_Z");
         _file.println("Channel Units,rad/s");
@@ -787,23 +816,27 @@ void saveMeasurements()
         _file.println(string);
         snprintf(string, sizeof(string), "Standard Deviation,%G", rawGyroToRads(statisticGyroZ.deviation()));
         _file.println(string);
-        _file.println("");
+        _file.println(""); // End of channel
 
         _file.close();
     }
 
-    LOG_DEBUG("ACC_X: Max %d, Min %d, Mean %f, StdDev %f",
-              statisticAccX.max(), statisticAccX.min(), statisticAccX.mean(), statisticAccX.deviation());
-    LOG_DEBUG("ACC_Y: Max %d, Min %d, Mean %f, StdDev %f",
-              statisticAccY.max(), statisticAccY.min(), statisticAccY.mean(), statisticAccY.deviation());
-    LOG_DEBUG("ACC_Z: Max %d, Min %d, Mean %f, StdDev %f",
+    LOG_DEBUG("ACC_X: Max %d, Min %d, Mean %f, Standard Deviation %f, Core Frequency %lfHz - %lf",
+              statisticAccX.max(), statisticAccX.min(), statisticAccX.mean(), statisticAccX.deviation(),
+              coreBinAccX.frequency, coreBinAccX.amplitude);
+    LOG_DEBUG("ACC_Y: Max %d, Min %d, Mean %f, Standard Deviation %f, Core Frequency %lfHz - %lf",
+              statisticAccY.max(), statisticAccY.min(), statisticAccY.mean(), statisticAccY.deviation(),
+              coreBinAccY.frequency, coreBinAccY.amplitude);
+    LOG_DEBUG("ACC_Z: Max %d, Min %d, Mean %f, Standard Deviation %f",
               statisticAccZ.max(), statisticAccZ.min(), statisticAccZ.mean(), statisticAccZ.deviation());
 
-    LOG_DEBUG("GYRO_X: Max %d, Min %d, Mean %f, StdDev %f",
-              statisticGyroX.max(), statisticGyroX.min(), statisticGyroX.mean(), statisticGyroX.deviation());
-    LOG_DEBUG("GYRO_Y: Max %d, Min %d, Mean %f, StdDev %f",
-              statisticGyroY.max(), statisticGyroY.min(), statisticGyroY.mean(), statisticGyroY.deviation());
-    LOG_DEBUG("GYRO_Z: Max %d, Min %d, Mean %f, StdDev %f",
+    LOG_DEBUG("GYRO_X: Max %d, Min %d, Mean %f, Standard Deviation %f, Core Frequency %lfHz - %lf",
+              statisticGyroX.max(), statisticGyroX.min(), statisticGyroX.mean(), statisticGyroX.deviation(),
+              coreBinGyroX.frequency, coreBinGyroX.amplitude);
+    LOG_DEBUG("GYRO_Y: Max %d, Min %d, Mean %f, Standard Deviation %f, Core Frequency %lfHz - %lf",
+              statisticGyroY.max(), statisticGyroY.min(), statisticGyroY.mean(), statisticGyroY.deviation(),
+              coreBinGyroY.frequency, coreBinGyroY.amplitude);
+    LOG_DEBUG("GYRO_Z: Max %d, Min %d, Mean %f, Standard Deviation %f",
               statisticGyroZ.max(), statisticGyroZ.min(), statisticGyroZ.mean(), statisticGyroZ.deviation());
 }
 
@@ -891,10 +924,15 @@ void loop()
     EventBits_t events = eventGroup.wait(EventBits::segment0Ready | EventBits::segment1Ready, 0);
     if (events != 0)
     {
-        size_t segmentIndex = (events & EventBits::segment0Ready) ? 0 : 1;
-
-        LOG_INFO("PSD segment %d is ready (index %d)", segmentCount, segmentIndex);
+        // Increment count of ready segments
         segmentCount++;
+
+        size_t segmentIndex = (events & EventBits::segment0Ready) ? 0 : 1;
+        size_t segmentTimeMs = segmentSize * imuIntervalMs;
+        size_t measureTimeMs = segmentCount * segmentTimeMs;
+
+        uint8_t readyPercents = static_cast<float>(measureTimeMs) / secondsToMillis(measureSettings.measureInterval) * 100;
+        LOG_INFO("PSD segment %d is ready (index %d), %u%%", segmentCount, segmentIndex, readyPercents);
 
         const int16_t *pSamplesAccX = &buffer.accX[segmentIndex * segmentSize];
         psdAccX.computeSegment(pSamplesAccX);
@@ -918,8 +956,6 @@ void loop()
         const int16_t *pSamplesGyroZ = &buffer.gyrZ[segmentIndex * segmentSize];
         statisticGyroZ.calculate(pSamplesGyroZ, segmentSize);
 
-        size_t segmentTimeMs = segmentSize * imuIntervalMs;
-        size_t measureTimeMs = segmentCount * segmentTimeMs;
         // Check if there is enough time to take the next segment
         if (measureTimeMs + segmentTimeMs > secondsToMillis(measureSettings.measureInterval + measureIntervalJitter))
         {

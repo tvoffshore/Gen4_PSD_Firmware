@@ -94,11 +94,11 @@ namespace
     {
         // Workaround to keep RS232 RX state while ESP is in deep sleep
         esp_err_t error = gpio_hold_en(Serials::Max3221::pinRxEnable);
-        LOG_DEBUG("Hold RS232 RE pin state, error: %d", error);
+        LOG_TRACE("Hold RS232 RE pin state, error: %d", error);
 
         // Workaround to keep RS485 RX state while ESP is in deep sleep
         error = gpio_hold_en(Serials::St3485::pinRxEnable);
-        LOG_DEBUG("Hold RS485 RE pin state, error: %d", error);
+        LOG_TRACE("Hold RS485 RE pin state, error: %d", error);
     }
 } // namespace
 
