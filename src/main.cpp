@@ -318,16 +318,6 @@ bool setupImu()
 
             result = imu.set_accel_fsr(accelFsrG);
         }
-
-        if (result == true)
-        {
-            result = imu.accelerometer_enable();
-        }
-
-        if (result == true)
-        {
-            result = imu.gyroscope_enable();
-        }
     }
     else
     {
@@ -656,7 +646,37 @@ void setupMeasurements(uint8_t pointsPsd, uint8_t sampleFrequency)
 }
 
 /**
- * @brief Save PSD results to the storage
+ * @brief Perform required calculations on raw data
+ *
+ * @param[in] index Buffer index with new data
+ */
+void doMeasurements(size_t index)
+{
+    const int16_t *pSamplesAccX = &buffer.accX[index * segmentSize];
+    psdAccX.computeSegment(pSamplesAccX);
+    statisticAccX.calculate(pSamplesAccX, segmentSize);
+
+    const int16_t *pSamplesAccY = &buffer.accY[index * segmentSize];
+    psdAccY.computeSegment(pSamplesAccY);
+    statisticAccY.calculate(pSamplesAccY, segmentSize);
+
+    const int16_t *pSamplesAccZ = &buffer.accZ[index * segmentSize];
+    statisticAccZ.calculate(pSamplesAccZ, segmentSize);
+
+    const int16_t *pSamplesGyroX = &buffer.gyrX[index * segmentSize];
+    psdGyroX.computeSegment(pSamplesGyroX);
+    statisticGyroX.calculate(pSamplesGyroX, segmentSize);
+
+    const int16_t *pSamplesGyroY = &buffer.gyrY[index * segmentSize];
+    psdGyroY.computeSegment(pSamplesGyroY);
+    statisticGyroY.calculate(pSamplesGyroY, segmentSize);
+
+    const int16_t *pSamplesGyroZ = &buffer.gyrZ[index * segmentSize];
+    statisticGyroZ.calculate(pSamplesGyroZ, segmentSize);
+}
+
+/**
+ * @brief Save measurements to the SD file
  */
 void saveMeasurements()
 {
@@ -927,34 +947,14 @@ void loop()
         // Increment count of ready segments
         segmentCount++;
 
-        size_t segmentIndex = (events & EventBits::segment0Ready) ? 0 : 1;
         size_t segmentTimeMs = segmentSize * imuIntervalMs;
         size_t measureTimeMs = segmentCount * segmentTimeMs;
 
         uint8_t readyPercents = static_cast<float>(measureTimeMs) / secondsToMillis(measureSettings.measureInterval) * 100;
-        LOG_INFO("PSD segment %d is ready (index %d), %u%%", segmentCount, segmentIndex, readyPercents);
+        LOG_INFO("PSD segment %d is ready, %u%%", segmentCount, readyPercents);
 
-        const int16_t *pSamplesAccX = &buffer.accX[segmentIndex * segmentSize];
-        psdAccX.computeSegment(pSamplesAccX);
-        statisticAccX.calculate(pSamplesAccX, segmentSize);
-
-        const int16_t *pSamplesAccY = &buffer.accY[segmentIndex * segmentSize];
-        psdAccY.computeSegment(pSamplesAccY);
-        statisticAccY.calculate(pSamplesAccY, segmentSize);
-
-        const int16_t *pSamplesAccZ = &buffer.accZ[segmentIndex * segmentSize];
-        statisticAccZ.calculate(pSamplesAccZ, segmentSize);
-
-        const int16_t *pSamplesGyroX = &buffer.gyrX[segmentIndex * segmentSize];
-        psdGyroX.computeSegment(pSamplesGyroX);
-        statisticGyroX.calculate(pSamplesGyroX, segmentSize);
-
-        const int16_t *pSamplesGyroY = &buffer.gyrY[segmentIndex * segmentSize];
-        psdGyroY.computeSegment(pSamplesGyroY);
-        statisticGyroY.calculate(pSamplesGyroY, segmentSize);
-
-        const int16_t *pSamplesGyroZ = &buffer.gyrZ[segmentIndex * segmentSize];
-        statisticGyroZ.calculate(pSamplesGyroZ, segmentSize);
+        size_t segmentIndex = (events & EventBits::segment0Ready) ? 0 : 1;
+        doMeasurements(segmentIndex);
 
         // Check if there is enough time to take the next segment
         if (measureTimeMs + segmentTimeMs > secondsToMillis(measureSettings.measureInterval + measureIntervalJitter))
@@ -962,15 +962,31 @@ void loop()
             LOG_DEBUG("Measure time %d ms + segment time %d ms > measure interval %u sec + interval jitter %d sec",
                       measureTimeMs, segmentTimeMs, measureSettings.measureInterval, measureIntervalJitter);
 
-            // Stop IMU sampling
-            stopImuTask();
+            segmentCount = 0;
 
             // Save measurements to the storage
             saveMeasurements();
 
-            FileSD::stopFileSystem();
+            // Check if board should go to sleep during pause interval
+            if (measureSettings.pauseInterval > 0)
+            {
+                // Stop IMU sampling
+                stopImuTask();
 
-            Power::deepSleep(measureSettings.pauseInterval);
+                FileSD::stopFileSystem();
+
+                Power::deepSleep(measureSettings.pauseInterval);
+            }
+            else
+            {
+                // Reset measurements statistic
+                statisticAccX.reset();
+                statisticAccY.reset();
+                statisticAccZ.reset();
+                statisticGyroX.reset();
+                statisticGyroY.reset();
+                statisticGyroZ.reset();
+            }
         }
     }
 }
@@ -1003,6 +1019,19 @@ void imuTask(void *pvParameters)
         // Wait for start event
         EventBits_t events = eventGroup.wait(EventBits::startImu);
 
+        // Enable sensors when task is started
+        bool status = imu.accelerometer_enable();
+        if (status == true)
+        {
+            status = imu.gyroscope_enable();
+        }
+
+        if (status != true)
+        {
+            LOG_ERROR("IMU start failed");
+            continue;
+        }
+
         LOG_INFO("IMU task running");
 
         // Report IMU is in IDLE state
@@ -1023,7 +1052,7 @@ void imuTask(void *pvParameters)
             // whether a deadline was missed if the code here took too long
 
             // Read new IMU sample
-            bool status = readImu(imuSample);
+            status = readImu(imuSample);
             if (status == true)
             {
                 LOG_TRACE("Acc X: %d, Acc Y: %d, Acc Z: %d, Gyr X: %d, Gyr Y: %d, Gyr Z: %d",
@@ -1059,6 +1088,10 @@ void imuTask(void *pvParameters)
             // Check if stop event occurs
             events = eventGroup.wait(EventBits::stopImu, 0);
         }
+
+        // Disable sensors when task is stopped
+        imu.accelerometer_disable();
+        imu.gyroscope_disable();
     }
 
     vTaskDelete(NULL);
