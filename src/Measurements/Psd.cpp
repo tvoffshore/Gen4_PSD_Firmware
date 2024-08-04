@@ -9,7 +9,7 @@
  *
  */
 
-#include "Psd.h"
+#include "Measurements/Psd.h"
 
 #include <assert.h>
 #include <stddef.h>
@@ -17,6 +17,8 @@
 
 #include "arduinoFFT.h"
 #include "Debug.hpp"
+
+using namespace Measurements;
 
 namespace
 {

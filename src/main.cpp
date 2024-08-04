@@ -22,7 +22,7 @@
 #include "FileSD.hpp"
 #include "InternalStorage.hpp"
 #include "Power.h"
-#include "Psd.h"
+#include "Measurements/Psd.h"
 #include "Serial/SerialManager.hpp"
 
 // Default time to take measurements, seconds
@@ -111,13 +111,13 @@ struct MeasureSettings
  */
 struct Buffer
 {
-    int16_t accX[2 * PSD::samplesCountMax];
-    int16_t accY[2 * PSD::samplesCountMax];
-    int16_t accZ[2 * PSD::samplesCountMax];
+    int16_t accX[2 * Measurements::PSD::samplesCountMax];
+    int16_t accY[2 * Measurements::PSD::samplesCountMax];
+    int16_t accZ[2 * Measurements::PSD::samplesCountMax];
 
-    int16_t gyrX[2 * PSD::samplesCountMax];
-    int16_t gyrY[2 * PSD::samplesCountMax];
-    int16_t gyrZ[2 * PSD::samplesCountMax];
+    int16_t gyrX[2 * Measurements::PSD::samplesCountMax];
+    int16_t gyrY[2 * Measurements::PSD::samplesCountMax];
+    int16_t gyrZ[2 * Measurements::PSD::samplesCountMax];
 };
 
 #if (LOG_LEVEL > LOG_LEVEL_NONE)
@@ -149,7 +149,7 @@ size_t segmentSize;
 size_t imuIntervalMs;
 
 // PSD for accelerometer axis X
-PSD psdAccX;
+Measurements::PSD psdAccX;
 
 // Measurements settings
 MeasureSettings measureSettings = {
