@@ -54,6 +54,9 @@ constexpr uint16_t pointsCutoffMin = 1;
 // Maximum points to store the PSD results
 constexpr uint16_t pointsCutoffMax = 1024;
 
+// State of statistic (1 enable, 0 disable)
+constexpr uint8_t statisticStateDefault = 1;
+
 // Milliseconds per second
 constexpr size_t millisPerSecond = 1000;
 // Settings identifier in internal storage
@@ -109,6 +112,7 @@ struct MeasureSettings
     uint16_t pointsCutoff;    // Points to store the PSD results
     uint8_t frequency;        // Sampling frequency, Hz
     uint8_t pointsPsd;        // Points to calculate PSD segment size, 2^x
+    uint8_t statisticState;   // State of statistic (1 enable, 0 disable)
 };
 #pragma pack(pop)
 
@@ -175,6 +179,7 @@ MeasureSettings measureSettings = {
     .pointsCutoff = pointsCutoffDefault,
     .frequency = sampleFrequencyDefault,
     .pointsPsd = pointsPsdDefault,
+    .statisticState = statisticStateDefault,
 };
 
 // Functions prototypes
@@ -449,6 +454,14 @@ void RegisterSerialReadHandlers()
 
                                       *responseString = dataString;
                                   });
+
+    serialManager.subscribeToRead(Serials::CommandId::StatisticState,
+                                  [](const char **responseString)
+                                  {
+                                      snprintf(dataString, sizeof(dataString), "%u", measureSettings.statisticState);
+
+                                      *responseString = dataString;
+                                  });
 }
 
 /**
@@ -560,8 +573,18 @@ void RegisterSerialWriteHandlers()
                                            value = pointsCutoffMax;
                                        }
 
-                                       // Update measure frequency setting
+                                       // Update points to store the PSD results setting
                                        measureSettings.pointsCutoff = value;
+                                       InternalStorage::updateSettings(measureSettingsId, measureSettings);
+                                   });
+
+    serialManager.subscribeToWrite(Serials::CommandId::StatisticState,
+                                   [](const char *dataString)
+                                   {
+                                       uint8_t value = atoi(dataString);
+
+                                       // Update state of statistic setting
+                                       measureSettings.statisticState = value;
                                        InternalStorage::updateSettings(measureSettingsId, measureSettings);
                                    });
 }
@@ -770,18 +793,18 @@ void saveMeasurements()
     }
 
     LOG_DEBUG("ACC_X: Max %d, Min %d, Mean %f, StdDev %f",
-             statisticAccX.max(), statisticAccX.min(), statisticAccX.mean(), statisticAccX.deviation());
+              statisticAccX.max(), statisticAccX.min(), statisticAccX.mean(), statisticAccX.deviation());
     LOG_DEBUG("ACC_Y: Max %d, Min %d, Mean %f, StdDev %f",
-             statisticAccY.max(), statisticAccY.min(), statisticAccY.mean(), statisticAccY.deviation());
+              statisticAccY.max(), statisticAccY.min(), statisticAccY.mean(), statisticAccY.deviation());
     LOG_DEBUG("ACC_Z: Max %d, Min %d, Mean %f, StdDev %f",
-             statisticAccZ.max(), statisticAccZ.min(), statisticAccZ.mean(), statisticAccZ.deviation());
+              statisticAccZ.max(), statisticAccZ.min(), statisticAccZ.mean(), statisticAccZ.deviation());
 
     LOG_DEBUG("GYRO_X: Max %d, Min %d, Mean %f, StdDev %f",
-             statisticGyroX.max(), statisticGyroX.min(), statisticGyroX.mean(), statisticGyroX.deviation());
+              statisticGyroX.max(), statisticGyroX.min(), statisticGyroX.mean(), statisticGyroX.deviation());
     LOG_DEBUG("GYRO_Y: Max %d, Min %d, Mean %f, StdDev %f",
-             statisticGyroY.max(), statisticGyroY.min(), statisticGyroY.mean(), statisticGyroY.deviation());
+              statisticGyroY.max(), statisticGyroY.min(), statisticGyroY.mean(), statisticGyroY.deviation());
     LOG_DEBUG("GYRO_Z: Max %d, Min %d, Mean %f, StdDev %f",
-             statisticGyroZ.max(), statisticGyroZ.min(), statisticGyroZ.mean(), statisticGyroZ.deviation());
+              statisticGyroZ.max(), statisticGyroZ.min(), statisticGyroZ.mean(), statisticGyroZ.deviation());
 }
 
 /**

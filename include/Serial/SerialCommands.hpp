@@ -4,9 +4,9 @@
  * @brief Serial commands list
  * @version 0.1
  * @date 2024-05-23
- * 
+ *
  * @copyright Copyright (c) 2024
- * 
+ *
  */
 
 #pragma once
@@ -39,6 +39,7 @@ namespace Serials
         PauseInterval,    // 6: Set/Get the interval of pause between measurements
         PointsPsd,        // 7: Set/Get the points to calculate PSD segment size, 2^x
         PointsCutoff,     // 8: Set/Get the points to store the PSD results
+        StatisticState,   // 9: Set/Get the state of statistic (1 enable, 0 disable)
 
         Commands // Total number of serial commands
     };
@@ -98,6 +99,11 @@ namespace Serials
         {
             .id = CommandId::PointsCutoff,
             .string = "PCUT",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::StatisticState,
+            .string = "STAT",
             .accessMask = AccessMask::read | AccessMask::write,
         },
     };
