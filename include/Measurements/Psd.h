@@ -17,6 +17,15 @@
 
 namespace Measurements
 {
+    /**
+     * @brief PSD bin information structure
+     */
+    struct PsdBin
+    {
+        double frequency;
+        double amplitude;
+    };
+
     class PSD
     {
     public:
@@ -27,7 +36,7 @@ namespace Measurements
          * @brief Prepare PSD calculations, setup data segment parameters
          *
          * @param[in] sampleCount Samples count in the segment
-         * @param[in] sampleFrequency Sampling frequency
+         * @param[in] sampleFrequency Sampling frequency, Hz
          */
         void setup(size_t sampleCount, size_t sampleFrequency);
 
@@ -42,9 +51,10 @@ namespace Measurements
          * @brief Return PSD results
          * Reset accumulated segment count (finish previous segments computing) if there are any segments
          *
-         * @return Calculated bins (only the first N/2 + 1 are usefull, where N = sampleCount)
+         * @param[out] coreBin Pointer to the core (maximum amplitude) bin in the results (nullptr if no need)
+         * @return Calculated bins
          */
-        const double *getResult();
+        const double *getResult(PsdBin *pCoreBin = nullptr);
 
     private:
         /**
@@ -55,7 +65,10 @@ namespace Measurements
         size_t _sampleFrequency; // Sampling frequency
         size_t _sampleCount;     // Number of sample in segment
         size_t _segmentCount;    // Number of computed segments
+        size_t _binCount;        // Number of bins
 
-        double _bins[samplesCountMax]; // PSD results
+        PsdBin _coreBin; // Core (maximum amplitude) bin
+
+        double _bins[samplesCountMax / 2 + 1]; // PSD results (only the first N/2 + 1 are usefull, where N = sampleCount)
     };
 } // namespace Measurements

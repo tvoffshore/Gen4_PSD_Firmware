@@ -632,10 +632,15 @@ void saveMeasurements()
         resultPoints = measureSettings.pointsCutoff;
     }
 
-    const double *resultPsdAccX = psdAccX.getResult();
-    const double *resultPsdAccY = psdAccY.getResult();
-    const double *resultPsdGyroX = psdGyroX.getResult();
-    const double *resultPsdGyroY = psdGyroY.getResult();
+    Measurements::PsdBin coreBinAccX;
+    Measurements::PsdBin coreBinAccY;
+    Measurements::PsdBin coreBinGyroX;
+    Measurements::PsdBin coreBinGyroY;
+
+    const double *resultPsdAccX = psdAccX.getResult(&coreBinAccX);
+    const double *resultPsdAccY = psdAccY.getResult(&coreBinAccY);
+    const double *resultPsdGyroX = psdGyroX.getResult(&coreBinGyroX);
+    const double *resultPsdGyroY = psdGyroY.getResult(&coreBinGyroY);
 
     SystemTime::TimestampString timestamp;
     SystemTime::getTimestamp(timestamp);
@@ -643,62 +648,11 @@ void saveMeasurements()
     snprintf(filename, sizeof(filename), "%s", timestamp);
     FileSD _file;
     _file.create("PSD", filename);
+
     bool isOpen = _file.open();
     if (isOpen == true)
     {
-        char string[50];
-
-        _file.println("Channel Name,GYRO_X");
-        _file.println("Channel Units,rad/s");
-        snprintf(string, sizeof(string), "Maximum,%G", rawGyroToRads(statisticGyroX.max()));
-        _file.println(string);
-        snprintf(string, sizeof(string), "Minimum,%G", rawGyroToRads(statisticGyroX.min()));
-        _file.println(string);
-        snprintf(string, sizeof(string), "Mean,%G", rawGyroToRads(statisticGyroX.mean()));
-        _file.println(string);
-        snprintf(string, sizeof(string), "Standard Deviation,%G", rawGyroToRads(statisticGyroX.deviation()));
-        _file.println(string);
-        snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, segmentSize);
-        _file.print(string);
-        for (size_t idx = 0; idx < resultPoints; idx++)
-        {
-            snprintf(string, sizeof(string), ",%G", resultPsdGyroX[idx]);
-            _file.print(string);
-        }
-        _file.println("");
-        _file.println("");
-
-        _file.println("Channel Name,GYRO_Y");
-        _file.println("Channel Units,rad/s");
-        snprintf(string, sizeof(string), "Maximum,%G", rawGyroToRads(statisticGyroY.max()));
-        _file.println(string);
-        snprintf(string, sizeof(string), "Minimum,%G", rawGyroToRads(statisticGyroY.min()));
-        _file.println(string);
-        snprintf(string, sizeof(string), "Mean,%G", rawGyroToRads(statisticGyroY.mean()));
-        _file.println(string);
-        snprintf(string, sizeof(string), "Standard Deviation,%G", rawGyroToRads(statisticGyroY.deviation()));
-        _file.println(string);
-        snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, segmentSize);
-        _file.print(string);
-        for (size_t idx = 0; idx < resultPoints; idx++)
-        {
-            snprintf(string, sizeof(string), ",%G", resultPsdGyroY[idx]);
-            _file.print(string);
-        }
-        _file.println("");
-        _file.println("");
-
-        _file.println("Channel Name,GYRO_Z");
-        _file.println("Channel Units,rad/s");
-        snprintf(string, sizeof(string), "Maximum,%G", rawGyroToRads(statisticGyroZ.max()));
-        _file.println(string);
-        snprintf(string, sizeof(string), "Minimum,%G", rawGyroToRads(statisticGyroZ.min()));
-        _file.println(string);
-        snprintf(string, sizeof(string), "Mean,%G", rawGyroToRads(statisticGyroZ.mean()));
-        _file.println(string);
-        snprintf(string, sizeof(string), "Standard Deviation,%G", rawGyroToRads(statisticGyroZ.deviation()));
-        _file.println(string);
-        _file.println("");
+        char string[100];
 
         _file.println("Channel Name,ACC_X");
         _file.println("Channel Units,m/s^2");
@@ -709,6 +663,8 @@ void saveMeasurements()
         snprintf(string, sizeof(string), "Mean,%G", rawAccelToMs2(statisticAccX.mean()));
         _file.println(string);
         snprintf(string, sizeof(string), "Standard Deviation,%G", rawAccelToMs2(statisticAccX.deviation()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", segmentSize, coreBinAccX.frequency, coreBinAccX.amplitude);
         _file.println(string);
         snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, segmentSize);
         _file.print(string);
@@ -729,6 +685,8 @@ void saveMeasurements()
         snprintf(string, sizeof(string), "Mean,%G", rawAccelToMs2(statisticAccY.mean()));
         _file.println(string);
         snprintf(string, sizeof(string), "Standard Deviation,%G", rawAccelToMs2(statisticAccY.deviation()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", segmentSize, coreBinAccY.frequency, coreBinAccY.amplitude);
         _file.println(string);
         snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, segmentSize);
         _file.print(string);
@@ -752,15 +710,63 @@ void saveMeasurements()
         _file.println(string);
         _file.println("");
 
-        _file.close();
-    }
+        _file.println("Channel Name,GYRO_X");
+        _file.println("Channel Units,rad/s");
+        snprintf(string, sizeof(string), "Maximum,%G", rawGyroToRads(statisticGyroX.max()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Minimum,%G", rawGyroToRads(statisticGyroX.min()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Mean,%G", rawGyroToRads(statisticGyroX.mean()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Standard Deviation,%G", rawGyroToRads(statisticGyroX.deviation()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", segmentSize, coreBinGyroX.frequency, coreBinGyroX.amplitude);
+        _file.println(string);
+        snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, segmentSize);
+        _file.print(string);
+        for (size_t idx = 0; idx < resultPoints; idx++)
+        {
+            snprintf(string, sizeof(string), ",%G", resultPsdGyroX[idx]);
+            _file.print(string);
+        }
+        _file.println("");
+        _file.println("");
 
-    double deltaFreq = static_cast<double>(measureSettings.frequency) / segmentSize;
-    double freq = 0;
-    for (size_t idx = 0; idx < resultPoints; idx++)
-    {
-        LOG_DEBUG("%lf: %lf", freq, resultPsdAccX[idx]);
-        freq += deltaFreq;
+        _file.println("Channel Name,GYRO_Y");
+        _file.println("Channel Units,rad/s");
+        snprintf(string, sizeof(string), "Maximum,%G", rawGyroToRads(statisticGyroY.max()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Minimum,%G", rawGyroToRads(statisticGyroY.min()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Mean,%G", rawGyroToRads(statisticGyroY.mean()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Standard Deviation,%G", rawGyroToRads(statisticGyroY.deviation()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", segmentSize, coreBinGyroY.frequency, coreBinGyroY.amplitude);
+        _file.println(string);
+        snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, segmentSize);
+        _file.print(string);
+        for (size_t idx = 0; idx < resultPoints; idx++)
+        {
+            snprintf(string, sizeof(string), ",%G", resultPsdGyroY[idx]);
+            _file.print(string);
+        }
+        _file.println("");
+        _file.println("");
+
+        _file.println("Channel Name,GYRO_Z");
+        _file.println("Channel Units,rad/s");
+        snprintf(string, sizeof(string), "Maximum,%G", rawGyroToRads(statisticGyroZ.max()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Minimum,%G", rawGyroToRads(statisticGyroZ.min()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Mean,%G", rawGyroToRads(statisticGyroZ.mean()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Standard Deviation,%G", rawGyroToRads(statisticGyroZ.deviation()));
+        _file.println(string);
+        _file.println("");
+
+        _file.close();
     }
 
     LOG_DEBUG("ACC_X: Max %d, Min %d, Mean %f, StdDev %f",
@@ -769,13 +775,6 @@ void saveMeasurements()
              statisticAccY.max(), statisticAccY.min(), statisticAccY.mean(), statisticAccY.deviation());
     LOG_DEBUG("ACC_Z: Max %d, Min %d, Mean %f, StdDev %f",
              statisticAccZ.max(), statisticAccZ.min(), statisticAccZ.mean(), statisticAccZ.deviation());
-
-    freq = 0;
-    for (size_t idx = 0; idx < resultPoints; idx++)
-    {
-        LOG_DEBUG("%lf: %lf", freq, resultPsdGyroX[idx]);
-        freq += deltaFreq;
-    }
 
     LOG_DEBUG("GYRO_X: Max %d, Min %d, Mean %f, StdDev %f",
              statisticGyroX.max(), statisticGyroX.min(), statisticGyroX.mean(), statisticGyroX.deviation());
