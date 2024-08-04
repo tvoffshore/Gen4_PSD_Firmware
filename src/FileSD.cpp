@@ -24,7 +24,7 @@ namespace
     // Delimiter of directory and filename
     const char *directoryDelimiter = "/";
     // Logs files extension
-    const char *fileExtension = "dat";
+    const char *fileExtension = "csv";
 
     // Bytes to megabytes ratio
     constexpr size_t sectorsToMbFactor = 2 * 1024;
@@ -196,6 +196,31 @@ bool FileSD::close()
  * @brief Print data string to the file
  *
  * @param string Data string to print
+ * @return True if data has been added to the file, false otherwise
+ */
+bool FileSD::print(const char *string)
+{
+    assert(string);
+
+    bool result = false;
+
+    if (_file)
+    {
+        // Print sample data to file
+        size_t printLen = _file.print(string);
+        // Print length should be equal to string length
+        result = (printLen == strlen(string));
+    }
+
+    LOG_TRACE("String \"%s\" %s printed to file \"%s\"", string, result ? "is" : "isn't", _path);
+
+    return result;
+}
+
+/**
+ * @brief Print data string to the file with the end of line characters
+ *
+ * @param string Data string to print
  * @return True if data has been added to file, false otherwise
  */
 bool FileSD::println(const char *string)
@@ -235,7 +260,7 @@ bool FileSD::write(const void *buffer, size_t size)
     {
         // Print sample data to file
         size_t writeSize = _file.write(buffer, size);
-        
+
         result = (writeSize == size);
     }
 

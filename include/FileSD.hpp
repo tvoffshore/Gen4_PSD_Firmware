@@ -80,6 +80,14 @@ public:
      * @param string Data string to print
      * @return True if data has been added to the file, false otherwise
      */
+    bool print(const char *string);
+
+    /**
+     * @brief Print data string to the file with the end of line characters
+     *
+     * @param string Data string to print
+     * @return True if data has been added to the file, false otherwise
+     */
     bool println(const char *string);
 
     /**

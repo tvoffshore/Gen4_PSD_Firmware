@@ -21,8 +21,9 @@
 // Source headers
 #include "FileSD.hpp"
 #include "InternalStorage.hpp"
-#include "Power.h"
 #include "Measurements/Psd.h"
+#include "Measurements/Statistic.h"
+#include "Power.h"
 #include "Serial/SerialManager.hpp"
 
 // Default time to take measurements, seconds
@@ -57,6 +58,11 @@ constexpr uint16_t pointsCutoffMax = 1024;
 constexpr size_t millisPerSecond = 1000;
 // Settings identifier in internal storage
 constexpr auto measureSettingsId = SettingsModules::Measurements;
+
+// Accelerometer range, G
+constexpr size_t accelRangeG = 2; // 2, 4, 8, 16
+// Gyroscope range, degrees per second
+constexpr size_t gyroRangeDps = 250; // 125, 250, 500, 1000, 2000
 
 namespace WirePin
 {
@@ -148,8 +154,19 @@ size_t segmentSize;
 // Interval between IMU samples, milliseconds
 size_t imuIntervalMs;
 
-// PSD for accelerometer axis X
+// PSD measurements for accelerometer and gyroscope axises X/Y
 Measurements::PSD psdAccX;
+Measurements::PSD psdAccY;
+Measurements::PSD psdGyroX;
+Measurements::PSD psdGyroY;
+
+// Statistic for accelerometer and gyroscope axises X/Y/Z
+Measurements::Statistic<int16_t> statisticAccX;
+Measurements::Statistic<int16_t> statisticAccY;
+Measurements::Statistic<int16_t> statisticAccZ;
+Measurements::Statistic<int16_t> statisticGyroX;
+Measurements::Statistic<int16_t> statisticGyroY;
+Measurements::Statistic<int16_t> statisticGyroZ;
 
 // Measurements settings
 MeasureSettings measureSettings = {
@@ -167,7 +184,8 @@ bool readImu(ImuSample &imuSample);
 void RegisterSerialReadHandlers();
 void RegisterSerialWriteHandlers();
 void setupBoard();
-void setupPSD(uint8_t sampleCount, uint8_t sampleFrequency);
+void setupMeasurements(uint8_t sampleCount, uint8_t sampleFrequency);
+void saveMeasurements();
 void imuTask(void *pvParameters);
 
 /**
@@ -179,6 +197,28 @@ void imuTask(void *pvParameters);
 constexpr size_t secondsToMillis(size_t seconds)
 {
     return seconds * 1000;
+}
+
+/**
+ * @brief Convert raw accelerometer value to m/s^2 units
+ *
+ * @param raw Raw value
+ * @return Value in m/s^2 units
+ */
+constexpr float rawAccelToMs2(int16_t raw)
+{
+    return (float)raw * accelRangeG * 9.81 / 32768;
+}
+
+/**
+ * @brief Convert raw gyroscope value to RAD/s units
+ *
+ * @param raw Raw value
+ * @return Value in RAD/s units
+ */
+constexpr float rawGyroToRads(int16_t raw)
+{
+    return (float)raw * gyroRangeDps * M_PI / 360 / 32768;
 }
 
 /**
@@ -213,7 +253,68 @@ bool setupImu()
     bool result = imu.begin(Wire, 0x68);
     if (result == true)
     {
-        result = imu.accelerometer_enable();
+        // Setup gyroscope FSR
+        if (result == true)
+        {
+            IIM42652_GYRO_CONFIG0_FS_SEL_t gyroFsrDps;
+
+            switch (gyroRangeDps)
+            {
+            case 125:
+                gyroFsrDps = IIM42652_GYRO_CONFIG0_FS_SEL_125dps;
+                break;
+            case 250:
+                gyroFsrDps = IIM42652_GYRO_CONFIG0_FS_SEL_250dps;
+                break;
+            case 500:
+                gyroFsrDps = IIM42652_GYRO_CONFIG0_FS_SEL_500dps;
+                break;
+            case 1000:
+                gyroFsrDps = IIM42652_GYRO_CONFIG0_FS_SEL_1000dps;
+                break;
+            case 2000:
+                gyroFsrDps = IIM42652_GYRO_CONFIG0_FS_SEL_2000dps;
+                break;
+            default:
+                assert(0); // Invalid gyroRangeDps option
+                break;
+            }
+
+            result = imu.set_gyro_fsr(gyroFsrDps);
+        }
+
+        // Setup accelerometer FSR
+        if (result == true)
+        {
+            IIM42652_ACCEL_CONFIG0_FS_SEL_t accelFsrG;
+
+            switch (accelRangeG)
+            {
+            case 2:
+                accelFsrG = IIM42652_ACCEL_CONFIG0_FS_SEL_2g;
+                break;
+            case 4:
+                accelFsrG = IIM42652_ACCEL_CONFIG0_FS_SEL_4g;
+                break;
+            case 8:
+                accelFsrG = IIM42652_ACCEL_CONFIG0_FS_SEL_8g;
+                break;
+            case 16:
+                accelFsrG = IIM42652_ACCEL_CONFIG0_FS_SEL_16g;
+                break;
+            default:
+                assert(0); // Invalid accelRangeG option
+                break;
+            }
+
+            result = imu.set_accel_fsr(accelFsrG);
+        }
+
+        if (result == true)
+        {
+            result = imu.accelerometer_enable();
+        }
+
         if (result == true)
         {
             result = imu.gyroscope_enable();
@@ -390,8 +491,8 @@ void RegisterSerialWriteHandlers()
                                        measureSettings.frequency = value;
                                        InternalStorage::updateSettings(measureSettingsId, measureSettings);
 
-                                       // Restart PSD measurements
-                                       setupPSD(measureSettings.pointsPsd, measureSettings.frequency);
+                                       // Restart measurements
+                                       setupMeasurements(measureSettings.pointsPsd, measureSettings.frequency);
 
                                        // Start IMU sampling
                                        startImuTask();
@@ -438,8 +539,8 @@ void RegisterSerialWriteHandlers()
                                        measureSettings.pointsPsd = value;
                                        InternalStorage::updateSettings(measureSettingsId, measureSettings);
 
-                                       // Restart PSD measurements
-                                       setupPSD(measureSettings.pointsPsd, measureSettings.frequency);
+                                       // Restart measurements
+                                       setupMeasurements(measureSettings.pointsPsd, measureSettings.frequency);
 
                                        // Start IMU sampling
                                        startImuTask();
@@ -485,12 +586,12 @@ void setupBoard()
 }
 
 /**
- * @brief Setup PSD measurements
+ * @brief Setup measurements
  *
  * @param[in] pointsPsd Points to calculate PSD segment size, 2^x
  * @param[in] sampleFrequency Sampling frequency, Hz
  */
-void setupPSD(uint8_t pointsPsd, uint8_t sampleFrequency)
+void setupMeasurements(uint8_t pointsPsd, uint8_t sampleFrequency)
 {
     static const size_t pow2[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192};
 
@@ -504,12 +605,22 @@ void setupPSD(uint8_t pointsPsd, uint8_t sampleFrequency)
     LOG_INFO("PSD setup: segment size %u samples, sample time %u ms", segmentSize, imuIntervalMs);
 
     psdAccX.setup(segmentSize, sampleFrequency);
+    psdAccY.setup(segmentSize, sampleFrequency);
+    psdGyroX.setup(segmentSize, sampleFrequency);
+    psdGyroY.setup(segmentSize, sampleFrequency);
+
+    statisticAccX.reset();
+    statisticAccY.reset();
+    statisticAccZ.reset();
+    statisticGyroX.reset();
+    statisticGyroY.reset();
+    statisticGyroZ.reset();
 }
 
 /**
  * @brief Save PSD results to the storage
  */
-void savePSD()
+void saveMeasurements()
 {
     // If 𝑁 is even (segmentSize = 2^x), you have 𝑁/2+1 useful components
     // because the symmetric part of the FFT spectrum for real-valued signals
@@ -521,18 +632,126 @@ void savePSD()
         resultPoints = measureSettings.pointsCutoff;
     }
 
-    double *resultAccX = psdAccX.getResult();
+    const double *resultPsdAccX = psdAccX.getResult();
+    const double *resultPsdAccY = psdAccY.getResult();
+    const double *resultPsdGyroX = psdGyroX.getResult();
+    const double *resultPsdGyroY = psdGyroY.getResult();
 
     SystemTime::TimestampString timestamp;
     SystemTime::getTimestamp(timestamp);
     char filename[50];
-    snprintf(filename, sizeof(filename), "AccX_%s", timestamp);
+    snprintf(filename, sizeof(filename), "%s", timestamp);
     FileSD _file;
     _file.create("PSD", filename);
     bool isOpen = _file.open();
     if (isOpen == true)
     {
-        _file.write(resultAccX, sizeof(*resultAccX) * resultPoints);
+        char string[50];
+
+        _file.println("Channel Name,GYRO_X");
+        _file.println("Channel Units,rad/s");
+        snprintf(string, sizeof(string), "Maximum,%G", rawGyroToRads(statisticGyroX.max()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Minimum,%G", rawGyroToRads(statisticGyroX.min()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Mean,%G", rawGyroToRads(statisticGyroX.mean()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Standard Deviation,%G", rawGyroToRads(statisticGyroX.deviation()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, segmentSize);
+        _file.print(string);
+        for (size_t idx = 0; idx < resultPoints; idx++)
+        {
+            snprintf(string, sizeof(string), ",%G", resultPsdGyroX[idx]);
+            _file.print(string);
+        }
+        _file.println("");
+        _file.println("");
+
+        _file.println("Channel Name,GYRO_Y");
+        _file.println("Channel Units,rad/s");
+        snprintf(string, sizeof(string), "Maximum,%G", rawGyroToRads(statisticGyroY.max()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Minimum,%G", rawGyroToRads(statisticGyroY.min()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Mean,%G", rawGyroToRads(statisticGyroY.mean()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Standard Deviation,%G", rawGyroToRads(statisticGyroY.deviation()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, segmentSize);
+        _file.print(string);
+        for (size_t idx = 0; idx < resultPoints; idx++)
+        {
+            snprintf(string, sizeof(string), ",%G", resultPsdGyroY[idx]);
+            _file.print(string);
+        }
+        _file.println("");
+        _file.println("");
+
+        _file.println("Channel Name,GYRO_Z");
+        _file.println("Channel Units,rad/s");
+        snprintf(string, sizeof(string), "Maximum,%G", rawGyroToRads(statisticGyroZ.max()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Minimum,%G", rawGyroToRads(statisticGyroZ.min()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Mean,%G", rawGyroToRads(statisticGyroZ.mean()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Standard Deviation,%G", rawGyroToRads(statisticGyroZ.deviation()));
+        _file.println(string);
+        _file.println("");
+
+        _file.println("Channel Name,ACC_X");
+        _file.println("Channel Units,m/s^2");
+        snprintf(string, sizeof(string), "Maximum,%G", rawAccelToMs2(statisticAccX.max()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Minimum,%G", rawAccelToMs2(statisticAccX.min()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Mean,%G", rawAccelToMs2(statisticAccX.mean()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Standard Deviation,%G", rawAccelToMs2(statisticAccX.deviation()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, segmentSize);
+        _file.print(string);
+        for (size_t idx = 0; idx < resultPoints; idx++)
+        {
+            snprintf(string, sizeof(string), ",%G", resultPsdAccX[idx]);
+            _file.print(string);
+        }
+        _file.println("");
+        _file.println("");
+
+        _file.println("Channel Name,ACC_Y");
+        _file.println("Channel Units,m/s^2");
+        snprintf(string, sizeof(string), "Maximum,%G", rawAccelToMs2(statisticAccY.max()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Minimum,%G", rawAccelToMs2(statisticAccY.min()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Mean,%G", rawAccelToMs2(statisticAccY.mean()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Standard Deviation,%G", rawAccelToMs2(statisticAccY.deviation()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, segmentSize);
+        _file.print(string);
+        for (size_t idx = 0; idx < resultPoints; idx++)
+        {
+            snprintf(string, sizeof(string), ",%G", resultPsdAccY[idx]);
+            _file.print(string);
+        }
+        _file.println("");
+        _file.println("");
+
+        _file.println("Channel Name,ACC_Z");
+        _file.println("Channel Units,m/s^2");
+        snprintf(string, sizeof(string), "Maximum,%G", rawAccelToMs2(statisticAccZ.max()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Minimum,%G", rawAccelToMs2(statisticAccZ.min()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Mean,%G", rawAccelToMs2(statisticAccZ.mean()));
+        _file.println(string);
+        snprintf(string, sizeof(string), "Standard Deviation,%G", rawAccelToMs2(statisticAccZ.deviation()));
+        _file.println(string);
+        _file.println("");
+
         _file.close();
     }
 
@@ -540,9 +759,30 @@ void savePSD()
     double freq = 0;
     for (size_t idx = 0; idx < resultPoints; idx++)
     {
-        LOG_INFO("%lf: %lf", freq, resultAccX[idx]);
+        LOG_DEBUG("%lf: %lf", freq, resultPsdAccX[idx]);
         freq += deltaFreq;
     }
+
+    LOG_DEBUG("ACC_X: Max %d, Min %d, Mean %f, StdDev %f",
+             statisticAccX.max(), statisticAccX.min(), statisticAccX.mean(), statisticAccX.deviation());
+    LOG_DEBUG("ACC_Y: Max %d, Min %d, Mean %f, StdDev %f",
+             statisticAccY.max(), statisticAccY.min(), statisticAccY.mean(), statisticAccY.deviation());
+    LOG_DEBUG("ACC_Z: Max %d, Min %d, Mean %f, StdDev %f",
+             statisticAccZ.max(), statisticAccZ.min(), statisticAccZ.mean(), statisticAccZ.deviation());
+
+    freq = 0;
+    for (size_t idx = 0; idx < resultPoints; idx++)
+    {
+        LOG_DEBUG("%lf: %lf", freq, resultPsdGyroX[idx]);
+        freq += deltaFreq;
+    }
+
+    LOG_DEBUG("GYRO_X: Max %d, Min %d, Mean %f, StdDev %f",
+             statisticGyroX.max(), statisticGyroX.min(), statisticGyroX.mean(), statisticGyroX.deviation());
+    LOG_DEBUG("GYRO_Y: Max %d, Min %d, Mean %f, StdDev %f",
+             statisticGyroY.max(), statisticGyroY.min(), statisticGyroY.mean(), statisticGyroY.deviation());
+    LOG_DEBUG("GYRO_Z: Max %d, Min %d, Mean %f, StdDev %f",
+             statisticGyroZ.max(), statisticGyroZ.min(), statisticGyroZ.mean(), statisticGyroZ.deviation());
 }
 
 /**
@@ -599,7 +839,7 @@ void setup()
         {
             LOG_INFO("IMU task created");
 
-            setupPSD(measureSettings.pointsPsd, measureSettings.frequency);
+            setupMeasurements(measureSettings.pointsPsd, measureSettings.frequency);
 
             // Start IMU sampling
             startImuTask();
@@ -634,8 +874,27 @@ void loop()
         LOG_INFO("PSD segment %d is ready (index %d)", segmentCount, segmentIndex);
         segmentCount++;
 
-        const int16_t *pSamples = &buffer.accX[segmentIndex * segmentSize];
-        psdAccX.computeSegment(pSamples);
+        const int16_t *pSamplesAccX = &buffer.accX[segmentIndex * segmentSize];
+        psdAccX.computeSegment(pSamplesAccX);
+        statisticAccX.calculate(pSamplesAccX, segmentSize);
+
+        const int16_t *pSamplesAccY = &buffer.accY[segmentIndex * segmentSize];
+        psdAccY.computeSegment(pSamplesAccY);
+        statisticAccY.calculate(pSamplesAccY, segmentSize);
+
+        const int16_t *pSamplesAccZ = &buffer.accZ[segmentIndex * segmentSize];
+        statisticAccZ.calculate(pSamplesAccZ, segmentSize);
+
+        const int16_t *pSamplesGyroX = &buffer.gyrX[segmentIndex * segmentSize];
+        psdGyroX.computeSegment(pSamplesGyroX);
+        statisticGyroX.calculate(pSamplesGyroX, segmentSize);
+
+        const int16_t *pSamplesGyroY = &buffer.gyrY[segmentIndex * segmentSize];
+        psdGyroY.computeSegment(pSamplesGyroY);
+        statisticGyroY.calculate(pSamplesGyroY, segmentSize);
+
+        const int16_t *pSamplesGyroZ = &buffer.gyrZ[segmentIndex * segmentSize];
+        statisticGyroZ.calculate(pSamplesGyroZ, segmentSize);
 
         size_t segmentTimeMs = segmentSize * imuIntervalMs;
         size_t measureTimeMs = segmentCount * segmentTimeMs;
@@ -648,8 +907,8 @@ void loop()
             // Stop IMU sampling
             stopImuTask();
 
-            // Save PSD results to the storage
-            savePSD();
+            // Save measurements to the storage
+            saveMeasurements();
 
             FileSD::stopFileSystem();
 
@@ -699,8 +958,11 @@ void imuTask(void *pvParameters)
 
         while ((events & EventBits::stopImu) == 0)
         {
+            // Wait for the next cycle
+            xWasDelayed = xTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(imuIntervalMs));
+
             // Perform action here. xWasDelayed value can be used to determine
-            // whether a deadline was missed if the code here took too long.
+            // whether a deadline was missed if the code here took too long
 
             // Read new IMU sample
             bool status = readImu(imuSample);
@@ -735,9 +997,6 @@ void imuTask(void *pvParameters)
                 segmentIndex = 1 - segmentIndex;
                 sampleIndex = 0;
             }
-
-            // Wait for the next cycle
-            xWasDelayed = xTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(imuIntervalMs));
 
             // Check if stop event occurs
             events = eventGroup.wait(EventBits::stopImu, 0);

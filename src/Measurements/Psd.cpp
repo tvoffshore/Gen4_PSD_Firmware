@@ -116,7 +116,7 @@ void PSD::computeSegment(const int16_t *samples)
  *
  * @return Calculated bins (only the first N/2 + 1 are usefull, where N = sampleCount)
  */
-double *PSD::getResult()
+const double *PSD::getResult()
 {
     if (_segmentCount > 0)
     {

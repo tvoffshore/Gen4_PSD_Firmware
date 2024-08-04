@@ -44,7 +44,7 @@ namespace Measurements
          *
          * @return Calculated bins (only the first N/2 + 1 are usefull, where N = sampleCount)
          */
-        double *getResult();
+        const double *getResult();
 
     private:
         /**
