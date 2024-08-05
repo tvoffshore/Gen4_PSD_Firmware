@@ -35,7 +35,7 @@ constexpr uint32_t pauseIntervalDefault = 300;
 constexpr uint32_t measureIntervalJitter = 5;
 
 // Default sampling frequency, Hz
-constexpr uint8_t sampleFrequencyDefault = 20;
+constexpr uint8_t sampleFrequencyDefault = 40;
 // Minimum sampling frequency, Hz
 constexpr uint8_t sampleFrequencyMin = 1;
 // Maximum sampling frequency, Hz
@@ -194,7 +194,9 @@ void RegisterSerialReadHandlers();
 void RegisterSerialWriteHandlers();
 void setupBoard();
 void setupMeasurements(uint8_t sampleCount, uint8_t sampleFrequency);
+void doMeasurements(size_t index);
 void saveMeasurements();
+void processMeasurements();
 void imuTask(void *pvParameters);
 
 /**
@@ -862,6 +864,62 @@ void saveMeasurements()
 }
 
 /**
+ * @brief Perform all required measurements actions
+ */
+void processMeasurements()
+{
+    // Check if event occurs
+    EventBits_t events = eventGroup.wait(EventBits::segment0Ready | EventBits::segment1Ready, 0);
+    if (events != 0)
+    {
+        // Increment count of ready segments
+        segmentCount++;
+
+        size_t segmentTimeMs = segmentSize * imuIntervalMs;
+        size_t measureTimeMs = segmentCount * segmentTimeMs;
+
+        float readyPercents = static_cast<float>(measureTimeMs) / secondsToMillis(measureSettings.measureInterval) * 100;
+        LOG_INFO("PSD segment %d is ready, %.1f%%", segmentCount, readyPercents);
+
+        size_t segmentIndex = (events & EventBits::segment0Ready) ? 0 : 1;
+        doMeasurements(segmentIndex);
+
+        // Check if there is enough time to take the next segment
+        if (measureTimeMs + segmentTimeMs > secondsToMillis(measureSettings.measureInterval + measureIntervalJitter))
+        {
+            LOG_DEBUG("Measure time %d ms + segment time %d ms > measure interval %u sec + interval jitter %d sec",
+                      measureTimeMs, segmentTimeMs, measureSettings.measureInterval, measureIntervalJitter);
+
+            segmentCount = 0;
+
+            // Save measurements to the storage
+            saveMeasurements();
+
+            // Check if board should go to sleep during pause interval
+            if (measureSettings.pauseInterval > 0)
+            {
+                // Stop IMU sampling
+                stopImuTask();
+
+                FileSD::stopFileSystem();
+
+                Power::deepSleep(measureSettings.pauseInterval);
+            }
+            else
+            {
+                // Reset measurements statistic
+                statisticAccX.reset();
+                statisticAccY.reset();
+                statisticAccZ.reset();
+                statisticGyroX.reset();
+                statisticGyroY.reset();
+                statisticGyroZ.reset();
+            }
+        }
+    }
+}
+
+/**
  * @brief Setup preliminary stuff before starting the main loop
  */
 void setup()
@@ -941,55 +999,8 @@ void loop()
     // Receive and handle serial commands from serial devices (if available)
     serialManager.process();
 
-    // Check if event occurs
-    EventBits_t events = eventGroup.wait(EventBits::segment0Ready | EventBits::segment1Ready, 0);
-    if (events != 0)
-    {
-        // Increment count of ready segments
-        segmentCount++;
-
-        size_t segmentTimeMs = segmentSize * imuIntervalMs;
-        size_t measureTimeMs = segmentCount * segmentTimeMs;
-
-        uint8_t readyPercents = static_cast<float>(measureTimeMs) / secondsToMillis(measureSettings.measureInterval) * 100;
-        LOG_INFO("PSD segment %d is ready, %u%%", segmentCount, readyPercents);
-
-        size_t segmentIndex = (events & EventBits::segment0Ready) ? 0 : 1;
-        doMeasurements(segmentIndex);
-
-        // Check if there is enough time to take the next segment
-        if (measureTimeMs + segmentTimeMs > secondsToMillis(measureSettings.measureInterval + measureIntervalJitter))
-        {
-            LOG_DEBUG("Measure time %d ms + segment time %d ms > measure interval %u sec + interval jitter %d sec",
-                      measureTimeMs, segmentTimeMs, measureSettings.measureInterval, measureIntervalJitter);
-
-            segmentCount = 0;
-
-            // Save measurements to the storage
-            saveMeasurements();
-
-            // Check if board should go to sleep during pause interval
-            if (measureSettings.pauseInterval > 0)
-            {
-                // Stop IMU sampling
-                stopImuTask();
-
-                FileSD::stopFileSystem();
-
-                Power::deepSleep(measureSettings.pauseInterval);
-            }
-            else
-            {
-                // Reset measurements statistic
-                statisticAccX.reset();
-                statisticAccY.reset();
-                statisticAccZ.reset();
-                statisticGyroX.reset();
-                statisticGyroY.reset();
-                statisticGyroZ.reset();
-            }
-        }
-    }
+    // Perform all required measurements actions
+    processMeasurements();
 }
 
 /**
