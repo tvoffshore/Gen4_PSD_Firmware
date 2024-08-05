@@ -1,7 +1,7 @@
 /**
  * @file Battery.cpp
  * @author Mikhail Kalina (apollo.mk58@gmail.com)
- * @brief Battery controller implementation
+ * @brief Battery reader implementation
  * @version 0.1
  * @date 2024-07-04
  *
@@ -13,25 +13,17 @@
 
 #include <stddef.h>
 
-// Arduino headers
-#include <Arduino.h>
-#include <SPI.h>
-
 #include <Debug.hpp>
+
+#include "Board.h"
 
 using namespace Battery;
 
 namespace
 {
-    namespace SpiPin
-    {
-        constexpr auto sck = GPIO_NUM_1;   // SPI clock pin
-        constexpr auto mosi = GPIO_NUM_47; // SPI MOSI pin
-        constexpr auto miso = GPIO_NUM_48; // SPI MISO pin
-    } // namespace SpiPin
-
     // Analog control pin active level
     constexpr uint8_t controlActiveLevel = 0;
+    // Analog control pin inactive level
     constexpr uint8_t controlInactiveLevel = 1 - controlActiveLevel;
 
     // Output divider resistance, kOhm
@@ -63,6 +55,11 @@ namespace
     // The last read battery status
     Status status = {.voltage = 0, .level = 255};
 
+    // Functions prototypes
+    void controlMeasure(bool enable);
+    uint32_t measureVoltage();
+    uint8_t voltageToLevel(uint16_t voltage);
+
     /**
      * @brief Control battery measurements
      *
@@ -73,10 +70,10 @@ namespace
         if (enable)
         {
             // Detach SPI pins and stop bus
-            SPI.end();
+            Board::stopSPI();
+
             // Configure analog input pin
             pinMode(ADC_IN, INPUT);
-
             digitalWrite(ADC_CTRL, controlActiveLevel);
         }
         else
@@ -84,7 +81,7 @@ namespace
             digitalWrite(ADC_CTRL, controlInactiveLevel);
 
             // Attach SPI pins and start bus
-            SPI.begin(SpiPin::sck, SpiPin::miso, SpiPin::mosi);
+            Board::setupSPI();
         }
     }
 
@@ -148,9 +145,9 @@ namespace
 } // namespace
 
 /**
- * @brief Initialize battery controller
+ * @brief Initialize battery reader
  */
-void Controller::initialize()
+void Battery::initialize()
 {
     pinMode(ADC_CTRL, OUTPUT);
     digitalWrite(ADC_CTRL, controlInactiveLevel);
@@ -161,7 +158,7 @@ void Controller::initialize()
  *
  * @return Battery status
  */
-const Status &Controller::readStatus()
+const Status &Battery::readStatus()
 {
     uint32_t voltageSumMv = 0;
 
@@ -190,7 +187,7 @@ const Status &Controller::readStatus()
  *
  * @return The last battery status
  */
-const Status &Controller::lastStatus()
+const Status &Battery::lastStatus()
 {
     return status;
 }

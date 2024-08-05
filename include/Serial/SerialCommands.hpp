@@ -40,6 +40,9 @@ namespace Serials
         PointsPsd,        // 7: Set/Get the points to calculate PSD segment size, 2^x
         PointsCutoff,     // 8: Set/Get the points to store the PSD results
         StatisticState,   // 9: Set/Get the state of statistic (1 enable, 0 disable)
+        LogLevel,         // 10: Set/Get serial debug log level
+        FwVersion,        // 11: Get FW version information
+        BatteryStatus,    // 12: Get battery status
 
         Commands // Total number of serial commands
     };
@@ -105,6 +108,21 @@ namespace Serials
             .id = CommandId::StatisticState,
             .string = "STAT",
             .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::LogLevel,
+            .string = "LOGL",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::FwVersion,
+            .string = "FVER",
+            .accessMask = AccessMask::read,
+        },
+        {
+            .id = CommandId::BatteryStatus,
+            .string = "BATT",
+            .accessMask = AccessMask::read,
         },
     };
     static_assert(sizeof(commandsList) / sizeof(*commandsList) == static_cast<size_t>(CommandId::Commands),

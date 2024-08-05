@@ -1,7 +1,7 @@
 /**
- * @file Power.cpp
+ * @file Board.cpp
  * @author Mikhail Kalina (apollo.mk58@gmail.com)
- * @brief Power management implementation
+ * @brief Board management implementation
  * @version 0.1
  * @date 2024-06-21
  *
@@ -9,7 +9,7 @@
  *
  */
 
-#include "Power.h"
+#include "Board.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -19,11 +19,12 @@
 #include <driver/rtc_io.h>
 #include <esp_sleep.h>
 #include <SPI.h>
+#include <Wire.h>
 
 #include "Serial/Interfaces/Max3221.hpp"
 #include "Serial/Interfaces/St3485.hpp"
 
-using namespace Power;
+using namespace Board;
 
 namespace
 {
@@ -40,6 +41,10 @@ namespace
     {
         return seconds * 1000 * 1000;
     }
+
+    // Functions prototypes
+    void moveLoraToSleep();
+    void holdPinsDeepSleep();
 
     /**
      * @brief Move LoRa chip into sleep mode
@@ -103,19 +108,91 @@ namespace
 } // namespace
 
 /**
- * @brief Setup board power
+ * @brief Setup board
  */
-void Power::setup()
+void Board::setup()
 {
     // Set LoRa chip into sleep mode
     moveLoraToSleep();
 
-    // Power up the board (LOW - power up, HIGH - power down)
-    pinMode(Vext_CTRL, OUTPUT);
-    digitalWrite(Vext_CTRL, LOW);
+    // Setup USB serial port for debug messages
+    setupUSB();
+    // Setup I2C interface to communicate with IMU, RTC
+    setupI2C();
+    // Setup SPI interface to communicate with SD, Display
+    setupSPI();
+    // Setup build-in LED (turn off)
+    setupLED();
+
+    // Power up the board
+    powerUp();
     delay(10);
 
     LOG_INFO("Board is powered up");
+}
+
+/**
+ * @brief Setup USB serial interface
+ */
+void Board::setupUSB()
+{
+    Serial.begin(UsbConfig::baudrate);
+}
+
+/**
+ * @brief Setup I2C interface
+ */
+void Board::setupI2C()
+{
+    Wire.begin(I2cConfig::pinSda, I2cConfig::pinScl, I2cConfig::frequency);
+}
+
+/**
+ * @brief Setup SPI interface
+ */
+void Board::setupSPI()
+{
+    SPI.setBitOrder(MSBFIRST);
+    SPI.setDataMode(SPI_MODE0);
+    SPI.setFrequency(SpiConfig::frequency);
+    SPI.begin(SpiConfig::pinSck, SpiConfig::pinMiso, SpiConfig::pinMosi);
+}
+
+/**
+ * @brief Stop SPI interface
+ */
+void Board::stopSPI()
+{
+    SPI.end();
+}
+
+/**
+ * @brief Setup build-in LED
+ */
+void Board::setupLED()
+{
+    pinMode(BUILTIN_LED, OUTPUT);
+    // Turn off build-in LED (LOW - off, HIGH - on)
+    digitalWrite(BUILTIN_LED, LOW);
+}
+
+/**
+ * @brief Setup board power
+ */
+void Board::powerUp()
+{
+    pinMode(Vext_CTRL, OUTPUT);
+    // LOW - power up, HIGH - power down
+    digitalWrite(Vext_CTRL, LOW);
+}
+
+/**
+ * @brief Shut down board power
+ */
+void Board::powerDown()
+{
+    // LOW - power up, HIGH - power down
+    digitalWrite(Vext_CTRL, HIGH);
 }
 
 /**
@@ -124,7 +201,7 @@ void Power::setup()
  *
  * @param sleepDuration Time to sleep, seconds
  */
-void Power::deepSleep(size_t sleepDuration)
+void Board::deepSleep(size_t sleepDuration)
 {
     LOG_INFO("Entering into sleep mode, wake up in %u seconds", sleepDuration);
 
@@ -133,7 +210,7 @@ void Power::deepSleep(size_t sleepDuration)
     esp_sleep_enable_timer_wakeup(secondsToMicros(sleepDuration));
 
     // Power down the board
-    digitalWrite(Vext_CTRL, HIGH);
+    powerDown();
 
     // Hold gpio pins
     holdPinsDeepSleep();
