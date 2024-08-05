@@ -63,7 +63,7 @@ namespace
  */
 void PSD::setup(size_t sampleCount, size_t sampleFrequency)
 {
-    assert(sampleCount < samplesCountMax);
+    assert(sampleCount <= samplesCountMax);
 
     // Save samples count
     _sampleCount = sampleCount;

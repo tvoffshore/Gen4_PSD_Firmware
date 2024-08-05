@@ -625,7 +625,8 @@ void setupMeasurements(uint8_t pointsPsd, uint8_t sampleFrequency)
     // Calculate interval between IMU samples
     imuIntervalMs = millisPerSecond / sampleFrequency;
 
-    LOG_INFO("PSD setup: segment size %u samples, sample time %u ms", segmentSize, imuIntervalMs);
+    LOG_INFO("PSD setup: segment size %d samples, sample time %d ms, segment time %d ms",
+             segmentSize, imuIntervalMs, segmentSize * imuIntervalMs);
 
     // Setup PSD measurements
     psdAccX.setup(segmentSize, sampleFrequency);
