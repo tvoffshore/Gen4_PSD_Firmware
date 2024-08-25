@@ -20,6 +20,7 @@
 #include <Debug.hpp>
 #include <Events.h>
 #include <IIM42652.h>
+#include <MadgwickAHRS.h>
 #include <SdFat.h>
 #include <SystemTime.hpp>
 #include <Wire.h>
@@ -79,6 +80,13 @@ namespace
     // Milliseconds per second
     constexpr size_t millisPerSecond = 1000;
 
+    // IMU axis raw value after the reset
+    constexpr int16_t imuResetValue = -32768;
+    // Delay between checking if the IMU axis values are valid, milliseconds
+    constexpr uint32_t imuWaitValidDelayMs = 1;
+    // Timeout of waiting for the valid IMU axis values, milliseconds
+    constexpr uint32_t imuWaitValidTimeoutMs = 100;
+
     namespace EventBits
     {
         constexpr EventBits_t startImu = BIT0;
@@ -127,6 +135,9 @@ namespace
         int16_t gyrX[2 * Measurements::PSD::samplesCountMax];
         int16_t gyrY[2 * Measurements::PSD::samplesCountMax];
         int16_t gyrZ[2 * Measurements::PSD::samplesCountMax];
+
+        float roll[2 * Measurements::PSD::samplesCountMax];
+        float pitch[2 * Measurements::PSD::samplesCountMax];
     };
 
     /**
@@ -175,6 +186,8 @@ namespace
     IIM42652 imu;
     // SD file system class
     SdFs sd;
+    // Madgwick's IMU and AHRS filter
+    Madgwick madgwickFilter;
 
     // RTOS event group object
     RTOS::EventGroup eventGroup;
@@ -191,13 +204,17 @@ namespace
     Measurements::PSD psdGyroX;
     Measurements::PSD psdGyroY;
 
-    // Statistic for accelerometer and gyroscope axises X/Y/Z
+    // Statistic for accelerometer axises X/Y/Z
     Measurements::Statistic<int16_t> statisticAccX;
     Measurements::Statistic<int16_t> statisticAccY;
     Measurements::Statistic<int16_t> statisticAccZ;
+    // Statistic for gyroscope axises X/Y/Z
     Measurements::Statistic<int16_t> statisticGyroX;
     Measurements::Statistic<int16_t> statisticGyroY;
     Measurements::Statistic<int16_t> statisticGyroZ;
+    // Statistic for angle axises Roll/Pitch
+    Measurements::Statistic<float> statisticRoll;
+    Measurements::Statistic<float> statisticPitch;
 
     // Measurements settings
     Settings settings = {
@@ -217,6 +234,7 @@ namespace
     void setupMeasurements(uint8_t sampleCount, uint8_t sampleFrequency);
     void performMeasurements(size_t index);
     void saveMeasurements();
+    void fillBuffer(size_t offset, const ImuSample &imuSample);
     void imuTask(void *pvParameters);
     void registerSerialReadHandlers();
     void registerSerialWriteHandlers();
@@ -244,6 +262,17 @@ namespace
     }
 
     /**
+     * @brief Convert raw accelerometer value to G units
+     *
+     * @param raw Raw value
+     * @return Value in G units
+     */
+    constexpr float rawAccelToG(int16_t raw)
+    {
+        return (float)raw * accelRangeG / 32768;
+    }
+
+    /**
      * @brief Convert raw gyroscope value to RAD/s units
      *
      * @param raw Raw value
@@ -252,6 +281,17 @@ namespace
     constexpr float rawGyroToRads(int16_t raw)
     {
         return (float)raw * gyroRangeDps * M_PI / 360 / 32768;
+    }
+
+    /**
+     * @brief Convert raw gyroscope value to Deg/s units
+     *
+     * @param raw Raw value
+     * @return Value in Deg/s units
+     */
+    constexpr float rawGyroToDegs(int16_t raw)
+    {
+        return (float)raw * gyroRangeDps / 32768;
     }
 
     /**
@@ -399,6 +439,9 @@ namespace
         LOG_INFO("PSD setup: segment size %d samples, sample time %d ms, segment time %d ms",
                  context.segmentSize, context.imuIntervalMs, context.segmentTimeMs);
 
+        // Setup madgwick's IMU and AHRS filter
+        madgwickFilter.begin(sampleFrequency);
+
         // Setup PSD measurements
         psdAccX.setup(context.segmentSize, sampleFrequency);
         psdAccY.setup(context.segmentSize, sampleFrequency);
@@ -412,6 +455,8 @@ namespace
         statisticGyroX.reset();
         statisticGyroY.reset();
         statisticGyroZ.reset();
+        statisticRoll.reset();
+        statisticPitch.reset();
     }
 
     /**
@@ -445,6 +490,12 @@ namespace
 
         const int16_t *pSamplesGyroZ = &buffer.gyrZ[offset];
         statisticGyroZ.calculate(pSamplesGyroZ, context.segmentSize);
+
+        const float *pSamplesRoll = &buffer.roll[offset];
+        statisticRoll.calculate(pSamplesRoll, context.segmentSize);
+
+        const float *pSamplesPitch = &buffer.pitch[offset];
+        statisticPitch.calculate(pSamplesPitch, context.segmentSize);
     }
 
     /**
@@ -613,6 +664,30 @@ namespace
             _file.println(string);
             _file.println(""); // End of channel
 
+            _file.println("Channel Name,ROLL");
+            _file.println("Channel Units,deg");
+            snprintf(string, sizeof(string), "Maximum,%G", statisticRoll.max());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Minimum,%G", statisticRoll.min());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Mean,%G", statisticRoll.mean());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Standard Deviation,%G", statisticRoll.deviation());
+            _file.println(string);
+            _file.println(""); // End of channel
+
+            _file.println("Channel Name,PITCH");
+            _file.println("Channel Units,deg");
+            snprintf(string, sizeof(string), "Maximum,%G", statisticPitch.max());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Minimum,%G", statisticPitch.min());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Mean,%G", statisticPitch.mean());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Standard Deviation,%G", statisticPitch.deviation());
+            _file.println(string);
+            _file.println(""); // End of channel
+
             _file.close();
         }
 
@@ -633,6 +708,44 @@ namespace
                   coreBinGyroY.frequency, coreBinGyroY.amplitude);
         LOG_DEBUG("GYRO_Z: Max %d, Min %d, Mean %f, Standard Deviation %f",
                   statisticGyroZ.max(), statisticGyroZ.min(), statisticGyroZ.mean(), statisticGyroZ.deviation());
+
+        LOG_DEBUG("ROLL: Max %f, Min %f, Mean %f, Standard Deviation %f",
+                  statisticRoll.max(), statisticRoll.min(), statisticRoll.mean(), statisticRoll.deviation());
+        LOG_DEBUG("PITCH: Max %f, Min %f, Mean %f, Standard Deviation %f",
+                  statisticPitch.max(), statisticPitch.min(), statisticPitch.mean(), statisticPitch.deviation());
+    }
+
+    /**
+     * @brief Fill buffer data with IMU sample
+     *
+     * @param[in] offset Data offset in the buffer
+     * @param[in] imuSample IMU sample
+     */
+    void fillBuffer(size_t offset, const ImuSample &imuSample)
+    {
+        // Fill Accel/Gyro buffer data
+        buffer.accX[offset] = imuSample.accel.x;
+        buffer.accY[offset] = imuSample.accel.y;
+        buffer.accZ[offset] = imuSample.accel.z;
+        buffer.gyrX[offset] = imuSample.gyro.x;
+        buffer.gyrY[offset] = imuSample.gyro.y;
+        buffer.gyrZ[offset] = imuSample.gyro.z;
+
+        // Convert to accel to G and gyro to DPS
+        float accelGX = rawAccelToG(imuSample.accel.x);
+        float accelGY = rawAccelToG(imuSample.accel.y);
+        float accelGZ = rawAccelToG(imuSample.accel.z);
+        float gyroDpsX = rawGyroToDegs(imuSample.gyro.x);
+        float gyroDpsY = rawGyroToDegs(imuSample.gyro.y);
+        float gyroDpsZ = rawGyroToDegs(imuSample.gyro.z);
+        LOG_TRACE("Acc G X %.1f, Y %.1f, Z %.1f, Gyro DPS X %.1f, Y %.1f, Z %.1f",
+                  accelGX, accelGY, accelGZ, gyroDpsX, gyroDpsY, gyroDpsZ);
+
+        // Calculate/fill angle buffer data
+        madgwickFilter.updateIMU(gyroDpsX, gyroDpsY, gyroDpsZ, accelGX, accelGY, accelGZ);
+        buffer.roll[offset] = madgwickFilter.getRoll();
+        buffer.pitch[offset] = madgwickFilter.getPitch();
+        LOG_TRACE("Angle Roll %.1f, Pitch %.1f", buffer.roll[offset], buffer.pitch[offset]);
     }
 
     /**
@@ -668,6 +781,37 @@ namespace
             if (status == true)
             {
                 status = imu.gyroscope_enable();
+                if (status == true)
+                {
+                    status = readImu(prevSample);
+                }
+            }
+
+            // Workaround to skip the first initial invalid samples
+            uint32_t timeout = 0;
+            while (status == true)
+            {
+                status = readImu(prevSample);
+                if (status == true &&
+                    prevSample.accel.x != imuResetValue &&
+                    prevSample.accel.y != imuResetValue &&
+                    prevSample.accel.z != imuResetValue &&
+                    prevSample.gyro.x != imuResetValue &&
+                    prevSample.gyro.y != imuResetValue &&
+                    prevSample.gyro.z != imuResetValue)
+                {
+                    break;
+                }
+                
+                if (timeout > imuWaitValidTimeoutMs)
+                {
+                    // IMU data is still invalid
+                    status = false;
+                    break;
+                }
+
+                delay(imuWaitValidDelayMs);
+                timeout += imuWaitValidDelayMs;
             }
 
             if (status != true)
@@ -699,7 +843,7 @@ namespace
                 status = readImu(imuSample);
                 if (status == true)
                 {
-                    LOG_TRACE("Acc X: %d, Acc Y: %d, Acc Z: %d, Gyr X: %d, Gyr Y: %d, Gyr Z: %d",
+                    LOG_TRACE("Acc: X %d, Y %d, Z %d, Gyro: X %d, Y %d, Z %d",
                               imuSample.accel.x, imuSample.accel.y, imuSample.accel.z, imuSample.gyro.x, imuSample.gyro.y, imuSample.gyro.z);
                     prevSample = imuSample;
                 }
@@ -711,12 +855,9 @@ namespace
                 }
 
                 size_t offset = segmentIndex * context.segmentSize + sampleIndex;
-                buffer.accX[offset] = imuSample.accel.x;
-                buffer.accY[offset] = imuSample.accel.y;
-                buffer.accZ[offset] = imuSample.accel.z;
-                buffer.gyrX[offset] = imuSample.gyro.x;
-                buffer.gyrY[offset] = imuSample.gyro.y;
-                buffer.gyrZ[offset] = imuSample.gyro.z;
+
+                // Fill buffer data with IMU sample
+                fillBuffer(offset, imuSample);
 
                 sampleIndex++;
                 if (sampleIndex >= context.segmentSize)
@@ -1008,6 +1149,8 @@ void Manager::process()
                 statisticGyroX.reset();
                 statisticGyroY.reset();
                 statisticGyroZ.reset();
+                statisticRoll.reset();
+                statisticPitch.reset();
             }
         }
     }
