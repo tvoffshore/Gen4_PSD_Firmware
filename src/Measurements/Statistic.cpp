@@ -28,6 +28,12 @@ void Statistic<Type>::reset()
     _isReset = true;
 }
 
+/**
+ * @brief Calculate statistics on the data set
+ *
+ * @param data Data buffer
+ * @param size Data size
+ */
 template <typename Type>
 void Statistic<Type>::calculate(const Type *data, size_t size)
 {

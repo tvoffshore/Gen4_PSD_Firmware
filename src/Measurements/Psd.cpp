@@ -48,8 +48,8 @@ namespace
     These are the input and output vectors
     Input vectors receive computed results from FFT
     */
-    double vReal[PSD::samplesCountMax];
-    double vImag[PSD::samplesCountMax];
+    double vReal[samplesCountMax];
+    double vImag[samplesCountMax];
 
     // FFT object
     auto fft = ArduinoFFT<double>();
@@ -61,7 +61,8 @@ namespace
  * @param[in] sampleCount Samples count in the segment
  * @param[in] sampleFrequency Sampling frequency, Hz
  */
-void PSD::setup(size_t sampleCount, size_t sampleFrequency)
+template <typename Type>
+void PSD<Type>::setup(size_t sampleCount, size_t sampleFrequency)
 {
     assert(sampleCount <= samplesCountMax);
 
@@ -81,7 +82,8 @@ void PSD::setup(size_t sampleCount, size_t sampleFrequency)
  *
  * @param[in] samples Data samples of the segmennt
  */
-void PSD::computeSegment(const int16_t *samples)
+template <typename Type>
+void PSD<Type>::computeSegment(const Type *samples)
 {
     if (_segmentCount == 0)
     {
@@ -121,7 +123,8 @@ void PSD::computeSegment(const int16_t *samples)
  * @param[out] pCoreBin Pointer to the core (maximum amplitude) bin in the results (nullptr if no need)
  * @return Calculated bins
  */
-const double *PSD::getResult(PsdBin *pCoreBin)
+template <typename Type>
+const double *PSD<Type>::getResult(PsdBin *pCoreBin)
 {
     if (_segmentCount > 0)
     {
@@ -164,7 +167,8 @@ const double *PSD::getResult(PsdBin *pCoreBin)
 /**
  * @brief Clear PSD results
  */
-void PSD::clear()
+template <typename Type>
+void PSD<Type>::clear()
 {
     // Clear all bins
     for (size_t idx = 0; idx < _binCount; idx++)
@@ -172,3 +176,6 @@ void PSD::clear()
         _bins[idx] = 0;
     }
 }
+
+template class PSD<int16_t>;
+template class PSD<float>;

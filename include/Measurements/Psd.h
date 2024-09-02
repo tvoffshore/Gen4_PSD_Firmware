@@ -17,6 +17,9 @@
 
 namespace Measurements
 {
+    // Maximum allowed samples in the segment
+    constexpr size_t samplesCountMax = 1024;
+
     /**
      * @brief PSD bin information structure
      */
@@ -26,12 +29,10 @@ namespace Measurements
         double amplitude;
     };
 
+    template <typename Type>
     class PSD
     {
     public:
-        // Maximum allowed samples in the segment
-        static constexpr size_t samplesCountMax = 1024;
-
         /**
          * @brief Prepare PSD calculations, setup data segment parameters
          *
@@ -45,7 +46,7 @@ namespace Measurements
          *
          * @param[in] samples Data samples of the segmennt
          */
-        void computeSegment(const int16_t *samples);
+        void computeSegment(const Type *samples);
 
         /**
          * @brief Return PSD results

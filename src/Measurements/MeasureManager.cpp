@@ -128,16 +128,16 @@ namespace
      */
     struct Buffer
     {
-        int16_t accX[2 * Measurements::PSD::samplesCountMax];
-        int16_t accY[2 * Measurements::PSD::samplesCountMax];
-        int16_t accZ[2 * Measurements::PSD::samplesCountMax];
+        int16_t accX[2 * Measurements::samplesCountMax];
+        int16_t accY[2 * Measurements::samplesCountMax];
+        int16_t accZ[2 * Measurements::samplesCountMax];
 
-        int16_t gyrX[2 * Measurements::PSD::samplesCountMax];
-        int16_t gyrY[2 * Measurements::PSD::samplesCountMax];
-        int16_t gyrZ[2 * Measurements::PSD::samplesCountMax];
+        int16_t gyrX[2 * Measurements::samplesCountMax];
+        int16_t gyrY[2 * Measurements::samplesCountMax];
+        int16_t gyrZ[2 * Measurements::samplesCountMax];
 
-        float roll[2 * Measurements::PSD::samplesCountMax];
-        float pitch[2 * Measurements::PSD::samplesCountMax];
+        float roll[2 * Measurements::samplesCountMax];
+        float pitch[2 * Measurements::samplesCountMax];
     };
 
     /**
@@ -194,15 +194,18 @@ namespace
 
     // Samples buffer
     Buffer buffer = {0};
+    // Accelerometer resultant direction buffer
+    float accelResult[Measurements::samplesCountMax];
 
     // Current measurements context
     Context context;
 
     // PSD measurements for accelerometer and gyroscope axises X/Y
-    Measurements::PSD psdAccX;
-    Measurements::PSD psdAccY;
-    Measurements::PSD psdGyroX;
-    Measurements::PSD psdGyroY;
+    Measurements::PSD<int16_t> psdAccX;
+    Measurements::PSD<int16_t> psdAccY;
+    Measurements::PSD<int16_t> psdGyroX;
+    Measurements::PSD<int16_t> psdGyroY;
+    Measurements::PSD<float> psdAccResult;
 
     // Statistic for accelerometer axises X/Y/Z
     Measurements::Statistic<int16_t> statisticAccX;
@@ -215,6 +218,8 @@ namespace
     // Statistic for angle axises Roll/Pitch
     Measurements::Statistic<float> statisticRoll;
     Measurements::Statistic<float> statisticPitch;
+    // Statistic for accelerometer resultant direction
+    Measurements::Statistic<float> statisticAccelResult;
 
     // Measurements settings
     Settings settings = {
@@ -232,9 +237,11 @@ namespace
     void startImuTask();
     void stopImuTask();
     void setupMeasurements(uint8_t sampleCount, uint8_t sampleFrequency);
-    void performMeasurements(size_t index);
+    void performCalculations(size_t index);
+    void calculateAccelResult(const int16_t *pAccX, double meanAccX, const int16_t *pAccY, double meanAccY, size_t length);
     void saveMeasurements();
     void fillBuffer(size_t offset, const ImuSample &imuSample);
+    void resetStatistics();
     void imuTask(void *pvParameters);
     void registerSerialReadHandlers();
     void registerSerialWriteHandlers();
@@ -447,16 +454,10 @@ namespace
         psdAccY.setup(context.segmentSize, sampleFrequency);
         psdGyroX.setup(context.segmentSize, sampleFrequency);
         psdGyroY.setup(context.segmentSize, sampleFrequency);
+        psdAccResult.setup(context.segmentSize, sampleFrequency);
 
         // Reset measurements statistic
-        statisticAccX.reset();
-        statisticAccY.reset();
-        statisticAccZ.reset();
-        statisticGyroX.reset();
-        statisticGyroY.reset();
-        statisticGyroZ.reset();
-        statisticRoll.reset();
-        statisticPitch.reset();
+        resetStatistics();
     }
 
     /**
@@ -464,7 +465,7 @@ namespace
      *
      * @param[in] index Buffer index with new data
      */
-    void performMeasurements(size_t index)
+    void performCalculations(size_t index)
     {
         // Data offset in buffer
         const size_t offset = index * context.segmentSize;
@@ -496,6 +497,65 @@ namespace
 
         const float *pSamplesPitch = &buffer.pitch[offset];
         statisticPitch.calculate(pSamplesPitch, context.segmentSize);
+
+        calculateAccelResult(pSamplesAccX, statisticAccX.mean(),
+                             pSamplesAccY, statisticAccY.mean(), context.segmentSize);
+        psdAccResult.computeSegment(accelResult);
+        statisticAccelResult.calculate(accelResult, context.segmentSize);
+    }
+
+    /**
+     * @brief Calculate accelerometer resultant direction using Linear Least Square
+     *
+     * @param pAccX Pointer to accelerometer X axis data
+     * @param pAccY Pointer to accelerometer Y axis data
+     * @param length Number of data points
+     */
+    void calculateAccelResult(const int16_t *pAccX, double meanAccX, const int16_t *pAccY, double meanAccY, size_t length)
+    {
+        double sumX = 0;
+        double sumY = 0;
+        double sumX2 = 0;
+        double sumXY = 0;
+
+        for (size_t idx = 0; idx < length; idx++)
+        {
+            // Remove mean
+            double x = rawAccelToMs2(pAccX[idx] - meanAccX);
+            double y = rawAccelToMs2(pAccY[idx] - meanAccY);
+
+            // Calculate sums
+            sumX += x;
+            sumY += y;
+            sumX2 += x * x;
+            sumXY += x * y;
+        }
+
+        double numerator = length * sumXY - sumX * sumY;
+        double denominator = length * sumX2 - sumX * sumX;
+        if (denominator != 0.0)
+        {
+            // Calculate slope
+            double slope = numerator / denominator;
+
+            // Calculate theta angle
+            double theta = atan(slope);
+
+            for (size_t idx = 0; idx < length; idx++)
+            {
+                double x = rawAccelToMs2(pAccX[idx] - meanAccX);
+                double y = rawAccelToMs2(pAccY[idx] - meanAccY);
+
+                accelResult[idx] = x * cos(theta) + y * sin(theta);
+            }
+        }
+        else
+        {
+            for (size_t idx = 0; idx < length; idx++)
+            {
+                accelResult[idx] = 0.0;
+            }
+        }
     }
 
     /**
@@ -517,11 +577,13 @@ namespace
         Measurements::PsdBin coreBinAccY;
         Measurements::PsdBin coreBinGyroX;
         Measurements::PsdBin coreBinGyroY;
+        Measurements::PsdBin coreBinAccResult;
 
         const double *resultPsdAccX = psdAccX.getResult(&coreBinAccX);
         const double *resultPsdAccY = psdAccY.getResult(&coreBinAccY);
         const double *resultPsdGyroX = psdGyroX.getResult(&coreBinGyroX);
         const double *resultPsdGyroY = psdGyroY.getResult(&coreBinGyroY);
+        const double *resultPsdAccResult = psdAccResult.getResult(&coreBinAccResult);
 
         Battery::Status batteryStatus = Battery::readStatus();
 
@@ -688,6 +750,28 @@ namespace
             _file.println(string);
             _file.println(""); // End of channel
 
+            _file.println("Channel Name,E_ACC_RES");
+            _file.println("Channel Units,m/s^2");
+            snprintf(string, sizeof(string), "Maximum,%G", statisticAccelResult.max());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Minimum,%G", statisticAccelResult.min());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Mean,%G", statisticAccelResult.mean());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAccelResult.deviation());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinAccResult.frequency, coreBinAccResult.amplitude);
+            _file.println(string);
+            snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
+            _file.print(string);
+            for (size_t idx = 0; idx < resultPoints; idx++)
+            {
+                snprintf(string, sizeof(string), ",%G", resultPsdAccResult[idx]);
+                _file.print(string);
+            }
+            _file.println(""); // End of PSD
+            _file.println(""); // End of channel
+
             _file.close();
         }
 
@@ -713,6 +797,10 @@ namespace
                   statisticRoll.max(), statisticRoll.min(), statisticRoll.mean(), statisticRoll.deviation());
         LOG_DEBUG("PITCH: Max %f, Min %f, Mean %f, Standard Deviation %f",
                   statisticPitch.max(), statisticPitch.min(), statisticPitch.mean(), statisticPitch.deviation());
+
+        LOG_DEBUG("ACC RESULT: Max %f, Min %f, Mean %f, Standard Deviation %f, Core Frequency %lfHz - %lf",
+                  statisticAccelResult.max(), statisticAccelResult.min(), statisticAccelResult.mean(),
+                  statisticAccelResult.deviation(), coreBinAccResult.frequency, coreBinAccResult.amplitude);
     }
 
     /**
@@ -746,6 +834,22 @@ namespace
         buffer.roll[offset] = madgwickFilter.getRoll();
         buffer.pitch[offset] = madgwickFilter.getPitch();
         LOG_TRACE("Angle Roll %.1f, Pitch %.1f", buffer.roll[offset], buffer.pitch[offset]);
+    }
+
+    /**
+     * @brief Reset measurements statistic
+     */
+    void resetStatistics()
+    {
+        statisticAccX.reset();
+        statisticAccY.reset();
+        statisticAccZ.reset();
+        statisticGyroX.reset();
+        statisticGyroY.reset();
+        statisticGyroZ.reset();
+        statisticRoll.reset();
+        statisticPitch.reset();
+        statisticAccelResult.reset();
     }
 
     /**
@@ -802,7 +906,7 @@ namespace
                 {
                     break;
                 }
-                
+
                 if (timeout > imuWaitValidTimeoutMs)
                 {
                     // IMU data is still invalid
@@ -1117,7 +1221,7 @@ void Manager::process()
         LOG_INFO("PSD segment %d is ready, %.1f%%", context.segmentCount, readyPercents);
 
         size_t segmentIndex = (events & EventBits::segment0Ready) ? 0 : 1;
-        performMeasurements(segmentIndex);
+        performCalculations(segmentIndex);
 
         // Check if there is enough time to take the next segment
         if (measureTimeMs + context.segmentTimeMs > secondsToMillis(settings.measureInterval + measureIntervalJitter))
@@ -1143,14 +1247,7 @@ void Manager::process()
             else
             {
                 // Reset measurements statistic
-                statisticAccX.reset();
-                statisticAccY.reset();
-                statisticAccZ.reset();
-                statisticGyroX.reset();
-                statisticGyroY.reset();
-                statisticGyroZ.reset();
-                statisticRoll.reset();
-                statisticPitch.reset();
+                resetStatistics();
             }
         }
     }
