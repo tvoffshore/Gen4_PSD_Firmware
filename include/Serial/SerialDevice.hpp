@@ -68,7 +68,7 @@ public:
      *
      * @param serialInterface Reference to Serial interface object
      */
-    SerialDevice(SerialInterface &serialInterface);
+    explicit SerialDevice(SerialInterface &serialInterface);
 
     /**
      * @brief Initialize Serial Device object
@@ -215,13 +215,13 @@ private:
 
     SerialInterface &_serialInterface; // Serial interface object
 
-    State _state = State::Start;   // State of receiving message
-    Serials::CommandId _commandId; // Identifier of received command
-    bool _isBroadcastMessage;      // Flag of received broadcast message
+    State _state = State::Start;                    // State of receiving message
+    CommandId _commandId = CommandId::SlaveAddress; // Identifier of received command
+    bool _isBroadcastMessage = false;               // Flag of received broadcast message
 
-    char _inputString[dataMaxLength + 1];  // Input string containing received data
-    char _outputString[dataMaxLength + 1]; // Output string containing response data and ACK
-    size_t _inputOffset = 0;               // Offset in input string of the next character to add
+    char _inputString[dataMaxLength + 1] = {0};  // Input string containing received data
+    char _outputString[dataMaxLength + 1] = {0}; // Output string containing response data and ACK
+    size_t _inputOffset = 0;                     // Offset in input string of the next character to add
 
     elapsedMillis _elapsed = 0; // Elapsed time from last character receiving from serial port
 

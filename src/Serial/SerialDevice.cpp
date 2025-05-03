@@ -49,7 +49,7 @@ void SerialDevice::initialize(ReadHandler &&readHandler, WriteHandler &&writeHan
     assert(writeHandler);
     assert(executeHandler);
 
-    LOG_INFO("Initialize serial device...");
+    LOG_DEBUG("Initialize serial device...");
 
     _readHandler = std::move(readHandler);
     _writeHandler = std::move(writeHandler);
