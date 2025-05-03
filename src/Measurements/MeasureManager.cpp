@@ -89,14 +89,14 @@ namespace
 
     namespace EventBits
     {
-        constexpr EventBits_t startImu = BIT0;
-        constexpr EventBits_t stopImu = BIT1;
-        constexpr EventBits_t imuIdle = BIT2;
-        constexpr EventBits_t imuRunning = BIT3;
+        constexpr EventBits_t startTask = BIT0;
+        constexpr EventBits_t stopTask = BIT1;
+        constexpr EventBits_t taskIsIdle = BIT2;
+        constexpr EventBits_t taskIsRunning = BIT3;
         constexpr EventBits_t segment0Ready = BIT4;
         constexpr EventBits_t segment1Ready = BIT5;
 
-        constexpr EventBits_t all = startImu | stopImu | imuIdle | imuRunning | segment0Ready | segment1Ready;
+        constexpr EventBits_t all = startTask | stopTask | taskIsIdle | taskIsRunning | segment0Ready | segment1Ready;
     } // namespace EventBits
 
     /**
@@ -234,15 +234,16 @@ namespace
     // Functions prototypes
     bool setupImu();
     bool readImu(ImuSample &imuSample);
-    void startImuTask();
-    void stopImuTask();
+    bool waitImuReady(ImuSample &imuSample);
+    void startSampling();
+    void stopSampling();
     void setupMeasurements(uint8_t sampleCount, uint8_t sampleFrequency);
     void performCalculations(size_t index);
     void calculateAccelResult(const int16_t *pAccX, double meanAccX, const int16_t *pAccY, double meanAccY, size_t length);
     void saveMeasurements();
     void fillBuffer(size_t offset, const ImuSample &imuSample);
     void resetStatistics();
-    void imuTask(void *pvParameters);
+    void samplingTask(void *pvParameters);
     void registerSerialReadHandlers();
     void registerSerialWriteHandlers();
 
@@ -395,38 +396,73 @@ namespace
     }
 
     /**
-     * @brief Start IMU sampling
+     * @brief Workaround to skip the first initial invalid samples
+     *
+     * @param imuSample First valid IMU sample
+     * @return true if IMU is ready, false otherwise
      */
-    void startImuTask()
+    bool waitImuReady(ImuSample &imuSample)
     {
-        LOG_INFO("Start IMU task");
+        bool result = false;
+        uint32_t elapsedMs = 0;
 
-        // Start IMU sampling
-        eventGroup.set(EventBits::startImu);
-
-        // Wait IMU task is idle
-        EventBits_t events = eventGroup.wait(EventBits::imuRunning);
-        if (!(events & EventBits::imuRunning))
+        while (elapsedMs < imuWaitValidTimeoutMs)
         {
-            LOG_ERROR("IMU task start failed");
+            bool status = readImu(imuSample);
+            if (status == true &&
+                imuSample.accel.x != imuResetValue &&
+                imuSample.accel.y != imuResetValue &&
+                imuSample.accel.z != imuResetValue &&
+                imuSample.gyro.x != imuResetValue &&
+                imuSample.gyro.y != imuResetValue &&
+                imuSample.gyro.z != imuResetValue)
+            {
+                result = true;
+                break;
+            }
+
+            delay(imuWaitValidDelayMs);
+            elapsedMs += imuWaitValidDelayMs;
+        }
+
+        LOG_DEBUG("IMU %s ready in %u ms", result ? "is" : "isn't", elapsedMs);
+
+        return result;
+    }
+
+    /**
+     * @brief Start sensors sampling
+     */
+    void startSampling()
+    {
+        LOG_INFO("Start sampling");
+
+        // Start sampling task
+        eventGroup.set(EventBits::startTask);
+
+        // Wait sampling task is running
+        EventBits_t events = eventGroup.wait(EventBits::taskIsRunning);
+        if (!(events & EventBits::taskIsRunning))
+        {
+            LOG_ERROR("Sampling task start failed");
         }
     }
 
     /**
-     * @brief Stop IMU sampling
+     * @brief Stop sensors sampling
      */
-    void stopImuTask()
+    void stopSampling()
     {
-        LOG_INFO("Stop IMU task");
+        LOG_INFO("Stop sampling");
 
-        // Stop IMU sampling
-        eventGroup.set(EventBits::stopImu);
+        // Stop sampling task
+        eventGroup.set(EventBits::stopTask);
 
-        // Wait IMU task is idle
-        EventBits_t events = eventGroup.wait(EventBits::imuIdle);
-        if (!(events & EventBits::imuIdle))
+        // Wait sampling task is idle
+        EventBits_t events = eventGroup.wait(EventBits::taskIsIdle);
+        if (!(events & EventBits::taskIsIdle))
         {
-            LOG_ERROR("IMU task stop failed");
+            LOG_ERROR("Sampling task stop failed");
         }
     }
 
@@ -853,11 +889,11 @@ namespace
     }
 
     /**
-     * @brief IMU samples reading task function
+     * @brief Sensors samples reading task function
      *
      * @param pvParameters Task parameters
      */
-    void imuTask(void *pvParameters)
+    void samplingTask(void *pvParameters)
     {
         TickType_t xLastWakeTime;
         BaseType_t xWasDelayed;
@@ -872,13 +908,13 @@ namespace
 
         while (1)
         {
-            LOG_INFO("IMU task idle");
+            LOG_INFO("Sampling task is IDLE");
 
-            // Report IMU is in IDLE state
-            eventGroup.set(EventBits::imuIdle);
+            // Report sampling task is in IDLE state
+            eventGroup.set(EventBits::taskIsIdle);
 
             // Wait for start event
-            EventBits_t events = eventGroup.wait(EventBits::startImu);
+            EventBits_t events = eventGroup.wait(EventBits::startTask);
 
             // Enable sensors when task is started
             bool status = imu.accelerometer_enable();
@@ -887,35 +923,8 @@ namespace
                 status = imu.gyroscope_enable();
                 if (status == true)
                 {
-                    status = readImu(prevSample);
+                    status = waitImuReady(prevSample);
                 }
-            }
-
-            // Workaround to skip the first initial invalid samples
-            uint32_t timeout = 0;
-            while (status == true)
-            {
-                status = readImu(prevSample);
-                if (status == true &&
-                    prevSample.accel.x != imuResetValue &&
-                    prevSample.accel.y != imuResetValue &&
-                    prevSample.accel.z != imuResetValue &&
-                    prevSample.gyro.x != imuResetValue &&
-                    prevSample.gyro.y != imuResetValue &&
-                    prevSample.gyro.z != imuResetValue)
-                {
-                    break;
-                }
-
-                if (timeout > imuWaitValidTimeoutMs)
-                {
-                    // IMU data is still invalid
-                    status = false;
-                    break;
-                }
-
-                delay(imuWaitValidDelayMs);
-                timeout += imuWaitValidDelayMs;
             }
 
             if (status != true)
@@ -924,10 +933,10 @@ namespace
                 continue;
             }
 
-            LOG_INFO("IMU task running");
+            LOG_INFO("Sampling task ia RUNNING");
 
-            // Report IMU is in IDLE state
-            eventGroup.set(EventBits::imuRunning);
+            // Report sampling task is in RUNNING state
+            eventGroup.set(EventBits::taskIsRunning);
 
             // Reset segment and sample index
             segmentIndex = 0;
@@ -935,7 +944,7 @@ namespace
             // Initialise the xLastWakeTime variable with the current time.
             xLastWakeTime = xTaskGetTickCount();
 
-            while ((events & EventBits::stopImu) == 0)
+            while ((events & EventBits::stopTask) == 0)
             {
                 // Wait for the next cycle
                 xWasDelayed = xTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(context.imuIntervalMs));
@@ -975,7 +984,7 @@ namespace
                 }
 
                 // Check if stop event occurs
-                events = eventGroup.wait(EventBits::stopImu, 0);
+                events = eventGroup.wait(EventBits::stopTask, 0);
             }
 
             // Disable sensors when task is stopped
@@ -1065,8 +1074,8 @@ namespace
                                                    value = sampleFrequencyMax;
                                                }
 
-                                               // Stop IMU sampling
-                                               stopImuTask();
+                                               // Stop sensors sampling
+                                               stopSampling();
 
                                                // Update measure frequency setting
                                                settings.frequency = value;
@@ -1075,8 +1084,8 @@ namespace
                                                // Restart measurements
                                                setupMeasurements(settings.pointsPsd, settings.frequency);
 
-                                               // Start IMU sampling
-                                               startImuTask();
+                                               // Start sensors sampling
+                                               startSampling();
                                            });
 
         Serials::Manager::subscribeToWrite(Serials::CommandId::MeasureInterval,
@@ -1113,8 +1122,8 @@ namespace
                                                    value = pointsPsdMax;
                                                }
 
-                                               // Stop IMU sampling
-                                               stopImuTask();
+                                               // Stop sensors sampling
+                                               stopSampling();
 
                                                // Update points to calculate PSD segment size
                                                settings.pointsPsd = value;
@@ -1123,8 +1132,8 @@ namespace
                                                // Restart measurements
                                                setupMeasurements(settings.pointsPsd, settings.frequency);
 
-                                               // Start IMU sampling
-                                               startImuTask();
+                                               // Start sensors sampling
+                                               startSampling();
                                            });
 
         Serials::Manager::subscribeToWrite(Serials::CommandId::PointsCutoff,
@@ -1177,28 +1186,30 @@ bool Manager::initialize()
     if (status == true)
     {
         LOG_INFO("IMU initialized");
-
-        xTaskCreatePinnedToCore(imuTask, "imuTask", 4096, NULL, 1, NULL, 0);
-
-        // Wait IMU task is idle
-        EventBits_t events = eventGroup.wait(EventBits::imuIdle);
-        if (events & EventBits::imuIdle)
-        {
-            LOG_INFO("IMU task created");
-
-            setupMeasurements(settings.pointsPsd, settings.frequency);
-
-            // Start IMU sampling
-            startImuTask();
-        }
-        else
-        {
-            LOG_ERROR("IMU task creation failed");
-        }
     }
     else
     {
         LOG_ERROR("IMU initialization failed");
+    }
+
+    if (status == true)
+    {
+        // Create sampling task
+        xTaskCreatePinnedToCore(samplingTask, "samplingTask", 4096, NULL, 1, NULL, 0);
+
+        // Wait sampling task is idle
+        EventBits_t events = eventGroup.wait(EventBits::taskIsIdle);
+        if (events & EventBits::taskIsIdle)
+        {
+            setupMeasurements(settings.pointsPsd, settings.frequency);
+
+            // Start sensors sampling
+            startSampling();
+        }
+        else
+        {
+            LOG_ERROR("Sampling task creation failed");
+        }
     }
 
     return status;
@@ -1237,8 +1248,8 @@ void Manager::process()
             // Check if board should go to sleep during pause interval
             if (settings.pauseInterval > 0)
             {
-                // Stop IMU sampling
-                stopImuTask();
+                // Stop sensors sampling
+                stopSampling();
 
                 FileSD::stopFileSystem();
 
