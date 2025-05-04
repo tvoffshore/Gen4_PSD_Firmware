@@ -25,11 +25,16 @@
 #include <SystemTime.hpp>
 #include <Wire.h>
 
+#include "Analog/GainSelector.hpp"
+#include "Analog/InputSelector.hpp"
+#include "Analog/Sensor.hpp"
+#include "Analog/VddController.hpp"
 #include "Battery.hpp"
 #include "Board.h"
 #include "FileSD.hpp"
 #include "FwVersion.hpp"
 #include "InternalStorage.hpp"
+#include "IoExpander/IoExpander.hpp"
 #include "Measurements/Psd.h"
 #include "Measurements/Statistic.h"
 #include "Serial/SerialManager.hpp"
@@ -38,6 +43,16 @@ using namespace Measurements;
 
 namespace
 {
+    // Analog sensor channel 1 input pin (ADC_1_CH3)
+    constexpr auto pinAdc1Input = GPIO_NUM_4;
+    // Analog sensor channel 1 enable pin
+    constexpr auto pinAdc1Enable = GPIO_NUM_2;
+
+    // Analog sensor channel 2 input pin (ADC_1_CH4)
+    constexpr auto pinAdc2Input = GPIO_NUM_5;
+    // Analog sensor channel 2 enable pin
+    constexpr auto pinAdc2Enable = GPIO_NUM_3;
+
     // Default time to take measurements, seconds
     constexpr uint32_t measureIntervalDefault = 600;
     // Default time between measurements, seconds
@@ -100,7 +115,16 @@ namespace
     } // namespace EventBits
 
     /**
-     * @brief IMU sample structure
+     * @brief Analog sensor sample structure
+     */
+    struct AdcSample
+    {
+        uint16_t chan1; // Analog channel 1 value
+        uint16_t chan2; // Analog channel 2 value
+    };
+
+    /**
+     * @brief IMU sensor sample structure
      */
     struct ImuSample
     {
@@ -128,6 +152,9 @@ namespace
      */
     struct Buffer
     {
+        uint16_t adc1[2 * Measurements::samplesCountMax];
+        uint16_t adc2[2 * Measurements::samplesCountMax];
+
         int16_t accX[2 * Measurements::samplesCountMax];
         int16_t accY[2 * Measurements::samplesCountMax];
         int16_t accZ[2 * Measurements::samplesCountMax];
@@ -182,6 +209,11 @@ namespace
         }
     };
 
+    // Analog sensor channel 1
+    Analog::Sensor adc1(pinAdc1Input, pinAdc1Enable);
+    // Analog sensor channel 2
+    Analog::Sensor adc2(pinAdc2Input, pinAdc2Enable);
+
     // IMU driver object
     IIM42652 imu;
     // SD file system class
@@ -200,13 +232,21 @@ namespace
     // Current measurements context
     Context context;
 
-    // PSD measurements for accelerometer and gyroscope axises X/Y
+    // PSD measurements for ADC1 and ADC2
+    Measurements::PSD<uint16_t> psdAdc1;
+    Measurements::PSD<uint16_t> psdAdc2;
+    // PSD measurements for accelerometer axises X/Y
     Measurements::PSD<int16_t> psdAccX;
     Measurements::PSD<int16_t> psdAccY;
+    // PSD measurements for gyroscope axises X/Y
     Measurements::PSD<int16_t> psdGyroX;
     Measurements::PSD<int16_t> psdGyroY;
+    // PSD measurements for accelerometer resultant direction
     Measurements::PSD<float> psdAccResult;
 
+    // Statistic for ADC1 and ADC2
+    Measurements::Statistic<uint16_t> statisticAdc1;
+    Measurements::Statistic<uint16_t> statisticAdc2;
     // Statistic for accelerometer axises X/Y/Z
     Measurements::Statistic<int16_t> statisticAccX;
     Measurements::Statistic<int16_t> statisticAccY;
@@ -231,19 +271,26 @@ namespace
         .statisticState = statisticStateDefault,
     };
 
-    // Functions prototypes
+    // IMU sensor functions
     bool setupImu();
     bool readImu(ImuSample &imuSample);
-    bool waitImuReady(ImuSample &imuSample);
+    bool waitImuReady();
+
+    // Main process functions
     void startSampling();
     void stopSampling();
     void setupMeasurements(uint8_t sampleCount, uint8_t sampleFrequency);
     void performCalculations(size_t index);
     void calculateAccelResult(const int16_t *pAccX, double meanAccX, const int16_t *pAccY, double meanAccY, size_t length);
     void saveMeasurements();
-    void fillBuffer(size_t offset, const ImuSample &imuSample);
     void resetStatistics();
+
+    // Sampling process functions
+    bool enableSensors();
+    void disableSensors();
+    void fillBuffer(size_t offset, const AdcSample &adcSample, const ImuSample &imuSample);
     void samplingTask(void *pvParameters);
+
     void registerSerialReadHandlers();
     void registerSerialWriteHandlers();
 
@@ -398,11 +445,11 @@ namespace
     /**
      * @brief Workaround to skip the first initial invalid samples
      *
-     * @param imuSample First valid IMU sample
      * @return true if IMU is ready, false otherwise
      */
-    bool waitImuReady(ImuSample &imuSample)
+    bool waitImuReady()
     {
+        ImuSample imuSample = {0};
         bool result = false;
         uint32_t elapsedMs = 0;
 
@@ -486,6 +533,8 @@ namespace
         madgwickFilter.begin(sampleFrequency);
 
         // Setup PSD measurements
+        psdAdc1.setup(context.segmentSize, sampleFrequency);
+        psdAdc2.setup(context.segmentSize, sampleFrequency);
         psdAccX.setup(context.segmentSize, sampleFrequency);
         psdAccY.setup(context.segmentSize, sampleFrequency);
         psdGyroX.setup(context.segmentSize, sampleFrequency);
@@ -505,6 +554,14 @@ namespace
     {
         // Data offset in buffer
         const size_t offset = index * context.segmentSize;
+
+        const uint16_t *pSamplesAdc1 = &buffer.adc1[offset];
+        psdAdc1.computeSegment(pSamplesAdc1);
+        statisticAdc1.calculate(pSamplesAdc1, context.segmentSize);
+
+        const uint16_t *pSamplesAdc2 = &buffer.adc2[offset];
+        psdAdc2.computeSegment(pSamplesAdc2);
+        statisticAdc2.calculate(pSamplesAdc2, context.segmentSize);
 
         const int16_t *pSamplesAccX = &buffer.accX[offset];
         psdAccX.computeSegment(pSamplesAccX);
@@ -609,12 +666,16 @@ namespace
             resultPoints = settings.pointsCutoff;
         }
 
+        Measurements::PsdBin coreBinAdc1;
+        Measurements::PsdBin coreBinAdc2;
         Measurements::PsdBin coreBinAccX;
         Measurements::PsdBin coreBinAccY;
         Measurements::PsdBin coreBinGyroX;
         Measurements::PsdBin coreBinGyroY;
         Measurements::PsdBin coreBinAccResult;
 
+        const double *resultPsdAdc1 = psdAdc1.getResult(&coreBinAdc1);
+        const double *resultPsdAdc2 = psdAdc2.getResult(&coreBinAdc2);
         const double *resultPsdAccX = psdAccX.getResult(&coreBinAccX);
         const double *resultPsdAccY = psdAccY.getResult(&coreBinAccY);
         const double *resultPsdGyroX = psdGyroX.getResult(&coreBinGyroX);
@@ -649,6 +710,50 @@ namespace
             snprintf(string, sizeof(string), "Logging Rate,%u", settings.frequency);
             _file.println(string);
             _file.println(""); // End of header
+
+            _file.println("Channel Name,ADC_1");
+            _file.println("Channel Units,raw_12bit");
+            snprintf(string, sizeof(string), "Maximum,%G", statisticAdc1.max());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Minimum,%G", statisticAdc1.min());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Mean,%G", statisticAdc1.mean());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAdc1.deviation());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinAdc1.frequency, coreBinAdc1.amplitude);
+            _file.println(string);
+            snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
+            _file.print(string);
+            for (size_t idx = 0; idx < resultPoints; idx++)
+            {
+                snprintf(string, sizeof(string), ",%G", resultPsdAdc1[idx]);
+                _file.print(string);
+            }
+            _file.println(""); // End of PSD
+            _file.println(""); // End of channel
+
+            _file.println("Channel Name,ADC_2");
+            _file.println("Channel Units,raw_12bit");
+            snprintf(string, sizeof(string), "Maximum,%G", statisticAdc2.max());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Minimum,%G", statisticAdc2.min());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Mean,%G", statisticAdc2.mean());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAdc2.deviation());
+            _file.println(string);
+            snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinAdc2.frequency, coreBinAdc2.amplitude);
+            _file.println(string);
+            snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
+            _file.print(string);
+            for (size_t idx = 0; idx < resultPoints; idx++)
+            {
+                snprintf(string, sizeof(string), ",%G", resultPsdAdc2[idx]);
+                _file.print(string);
+            }
+            _file.println(""); // End of PSD
+            _file.println(""); // End of channel
 
             _file.println("Channel Name,ACC_X");
             _file.println("Channel Units,m/s^2");
@@ -811,6 +916,13 @@ namespace
             _file.close();
         }
 
+        LOG_DEBUG("ADC_1: Max %d, Min %d, Mean %f, Standard Deviation %f, Core Frequency %lfHz - %lf",
+                  statisticAdc1.max(), statisticAdc1.min(), statisticAdc1.mean(), statisticAdc1.deviation(),
+                  coreBinAdc1.frequency, coreBinAdc1.amplitude);
+        LOG_DEBUG("ADC_2: Max %d, Min %d, Mean %f, Standard Deviation %f, Core Frequency %lfHz - %lf",
+                  statisticAdc2.max(), statisticAdc2.min(), statisticAdc2.mean(), statisticAdc2.deviation(),
+                  coreBinAdc2.frequency, coreBinAdc2.amplitude);
+
         LOG_DEBUG("ACC_X: Max %d, Min %d, Mean %f, Standard Deviation %f, Core Frequency %lfHz - %lf",
                   statisticAccX.max(), statisticAccX.min(), statisticAccX.mean(), statisticAccX.deviation(),
                   coreBinAccX.frequency, coreBinAccX.amplitude);
@@ -840,20 +952,103 @@ namespace
     }
 
     /**
+     * @brief Reset measurements statistic
+     */
+    void resetStatistics()
+    {
+        statisticAdc1.reset();
+        statisticAdc2.reset();
+        statisticAccX.reset();
+        statisticAccY.reset();
+        statisticAccZ.reset();
+        statisticGyroX.reset();
+        statisticGyroY.reset();
+        statisticGyroZ.reset();
+        statisticRoll.reset();
+        statisticPitch.reset();
+        statisticAccelResult.reset();
+    }
+
+    /**
+     * @brief Start sensors readings
+     *
+     * @return true if sensors are started successfully, false otherwsie
+     */
+    bool enableSensors()
+    {
+        bool status = false;
+
+        adc1.enable();
+        adc2.enable();
+
+        status = Analog::VddController::applyVoltage();
+        if (status != true)
+        {
+            LOG_ERROR("Sensor voltage apply fail!");
+            return false;
+        }
+
+        status = imu.accelerometer_enable();
+        if (status != true)
+        {
+            LOG_ERROR("Accelerometer enable failed");
+            return false;
+        }
+
+        status = imu.gyroscope_enable();
+        if (status != true)
+        {
+            LOG_ERROR("Gyroscope enable failed");
+            return false;
+        }
+
+        status = waitImuReady();
+        if (status != true)
+        {
+            LOG_ERROR("IMU wait ready failed");
+            return false;
+        }
+
+        return status;
+    }
+
+    /**
+     * @brief Start sensors readings
+     */
+    void disableSensors()
+    {
+        Analog::VddController::cutOffVoltage();
+        adc1.disable();
+        adc2.disable();
+        imu.accelerometer_disable();
+        imu.gyroscope_disable();
+    }
+
+    /**
      * @brief Fill buffer data with IMU sample
      *
      * @param[in] offset Data offset in the buffer
-     * @param[in] imuSample IMU sample
+     * @param[in] adcSample Analog sensor sample
+     * @param[in] imuSample IMU sensor sample
      */
-    void fillBuffer(size_t offset, const ImuSample &imuSample)
+    void fillBuffer(size_t offset, const AdcSample &adcSample, const ImuSample &imuSample)
     {
-        // Fill Accel/Gyro buffer data
+        // Fill ADC buffer data
+        buffer.adc1[offset] = adcSample.chan1;
+        buffer.adc2[offset] = adcSample.chan2;
+        LOG_TRACE("Adc: chan1 %u, chan2 %u", adcSample.chan1, adcSample.chan2);
+
+        // Fill Accel buffer data
         buffer.accX[offset] = imuSample.accel.x;
         buffer.accY[offset] = imuSample.accel.y;
         buffer.accZ[offset] = imuSample.accel.z;
+        LOG_TRACE("Acc: X %d, Y %d, Z %d", imuSample.accel.x, imuSample.accel.y, imuSample.accel.z);
+
+        // Fill Gyro buffer data
         buffer.gyrX[offset] = imuSample.gyro.x;
         buffer.gyrY[offset] = imuSample.gyro.y;
         buffer.gyrZ[offset] = imuSample.gyro.z;
+        LOG_TRACE("Gyro: X %d, Y %d, Z %d", imuSample.gyro.x, imuSample.gyro.y, imuSample.gyro.z);
 
         // Convert to accel to G and gyro to DPS
         float accelGX = rawAccelToG(imuSample.accel.x);
@@ -869,23 +1064,7 @@ namespace
         madgwickFilter.updateIMU(gyroDpsX, gyroDpsY, gyroDpsZ, accelGX, accelGY, accelGZ);
         buffer.roll[offset] = madgwickFilter.getRoll();
         buffer.pitch[offset] = madgwickFilter.getPitch();
-        LOG_TRACE("Angle Roll %.1f, Pitch %.1f", buffer.roll[offset], buffer.pitch[offset]);
-    }
-
-    /**
-     * @brief Reset measurements statistic
-     */
-    void resetStatistics()
-    {
-        statisticAccX.reset();
-        statisticAccY.reset();
-        statisticAccZ.reset();
-        statisticGyroX.reset();
-        statisticGyroY.reset();
-        statisticGyroZ.reset();
-        statisticRoll.reset();
-        statisticPitch.reset();
-        statisticAccelResult.reset();
+        LOG_TRACE("Angle: roll %.1f, pitch %.1f", buffer.roll[offset], buffer.pitch[offset]);
     }
 
     /**
@@ -898,8 +1077,8 @@ namespace
         TickType_t xLastWakeTime;
         BaseType_t xWasDelayed;
 
+        AdcSample adcSample = {0};
         ImuSample imuSample = {0};
-        ImuSample prevSample = imuSample;
 
         size_t segmentIndex = 0;
         size_t sampleIndex = 0;
@@ -917,19 +1096,12 @@ namespace
             EventBits_t events = eventGroup.wait(EventBits::startTask);
 
             // Enable sensors when task is started
-            bool status = imu.accelerometer_enable();
-            if (status == true)
-            {
-                status = imu.gyroscope_enable();
-                if (status == true)
-                {
-                    status = waitImuReady(prevSample);
-                }
-            }
-
+            bool status = enableSensors();
             if (status != true)
             {
-                LOG_ERROR("IMU start failed");
+                LOG_ERROR("Sensors start failed");
+                // Disable sensors when start failed
+                disableSensors();
                 continue;
             }
 
@@ -952,25 +1124,21 @@ namespace
                 // Perform action here. xWasDelayed value can be used to determine
                 // whether a deadline was missed if the code here took too long
 
+                // Read new ADC samples
+                adcSample.chan1 = adc1.read();
+                adcSample.chan2 = adc2.read();
+
                 // Read new IMU sample
                 status = readImu(imuSample);
-                if (status == true)
+                if (status != true)
                 {
-                    LOG_TRACE("Acc: X %d, Y %d, Z %d, Gyro: X %d, Y %d, Z %d",
-                              imuSample.accel.x, imuSample.accel.y, imuSample.accel.z, imuSample.gyro.x, imuSample.gyro.y, imuSample.gyro.z);
-                    prevSample = imuSample;
-                }
-                else
-                {
-                    LOG_ERROR("IMU reading failed");
-                    // Duplicate previous sample
-                    imuSample = prevSample;
+                    LOG_WARNING("IMU reading failed");
                 }
 
                 size_t offset = segmentIndex * context.segmentSize + sampleIndex;
 
                 // Fill buffer data with IMU sample
-                fillBuffer(offset, imuSample);
+                fillBuffer(offset, adcSample, imuSample);
 
                 sampleIndex++;
                 if (sampleIndex >= context.segmentSize)
@@ -988,8 +1156,7 @@ namespace
             }
 
             // Disable sensors when task is stopped
-            imu.accelerometer_disable();
-            imu.gyroscope_disable();
+            disableSensors();
         }
 
         vTaskDelete(NULL);
@@ -1181,7 +1348,10 @@ bool Manager::initialize()
     registerSerialReadHandlers();
     registerSerialWriteHandlers();
 
-    // Start accelerometer readings
+    // Initialize sensors
+    adc1.initialize();
+    adc2.initialize();
+
     bool status = setupImu();
     if (status == true)
     {
@@ -1190,6 +1360,30 @@ bool Manager::initialize()
     else
     {
         LOG_ERROR("IMU initialization failed");
+    }
+
+    status = IoExpander::initialize();
+    if (status == false)
+    {
+        LOG_ERROR("IO expander initialization failed!");
+    }
+
+    status = Analog::GainSelector::initialize();
+    if (status == false)
+    {
+        LOG_ERROR("Gain selector initialization failed!");
+    }
+
+    status = Analog::InputSelector::initialize();
+    if (status == false)
+    {
+        LOG_ERROR("Input type selector initialization failed!");
+    }
+
+    status = Analog::VddController::initialize();
+    if (status == false)
+    {
+        LOG_ERROR("Voltage controller initialization failed!");
     }
 
     if (status == true)

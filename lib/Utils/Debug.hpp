@@ -39,10 +39,10 @@
 #define LOG_GET_LEVEL() (LogsOutput::getLogLevel())
 
 #define __FILE_NAME__ strrchr("\\" __FILE__, '\\') + 1
-#define __LOG_SAVE__(loglevel, format, ...)                                                                            \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        LogsOutput::print(loglevel, __FILE_NAME__, __LINE__, __FUNCTION__, format, ##__VA_ARGS__);                     \
+#define __LOG_SAVE__(loglevel, format, ...)                                                        \
+    do                                                                                             \
+    {                                                                                              \
+        LogsOutput::print(loglevel, __FILE_NAME__, __LINE__, __FUNCTION__, format, ##__VA_ARGS__); \
     } while (0)
 
 #define TAG_ERROR "E"
@@ -76,14 +76,7 @@ public:
             module = offset + 1;
         }
 
-        if (logLevel > LOG_LEVEL_INFO)
-        {
-            snprintf(debugString, sizeof(debugString), "[%6u][%s][%s:%u] %s: ", timeMs, tag, module, line, func);
-        }
-        else
-        {
-            snprintf(debugString, sizeof(debugString), "[%6u][%s][%s]: ", timeMs, tag, module);
-        }
+        snprintf(debugString, sizeof(debugString), "[%6u][%s][%s:%u]: ", timeMs, tag, module, line);
 
         size_t offset = strlen(debugString);
 

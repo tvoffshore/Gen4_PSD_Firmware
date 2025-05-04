@@ -29,7 +29,7 @@ namespace
      * Calculate average value for elements
      */
     template <typename T>
-    T getAverage(T *elements, size_t count)
+    double getAverage(T *elements, size_t count)
     {
         assert(elements);
         assert(count > 0);
@@ -40,7 +40,7 @@ namespace
             sum += elements[idx];
         }
 
-        T result = static_cast<T>(sum / count);
+        double result = sum / count;
         return result;
     }
 
@@ -91,10 +91,10 @@ void PSD<Type>::computeSegment(const Type *samples)
         clear();
     }
 
-    auto average = getAverage(samples, _sampleCount);
+    double average = getAverage(samples, _sampleCount);
     for (size_t idx = 0; idx < _sampleCount; idx++)
     {
-        vReal[idx] = samples[idx] - average;
+        vReal[idx] = static_cast<double>(samples[idx]) - average;
         vImag[idx] = 0;
     }
 
@@ -177,5 +177,6 @@ void PSD<Type>::clear()
     }
 }
 
+template class PSD<uint16_t>;
 template class PSD<int16_t>;
 template class PSD<float>;

@@ -140,5 +140,6 @@ void Statistic<Type>::updateMaxMin(Type value)
     }
 }
 
+template class Statistic<uint16_t>;
 template class Statistic<int16_t>;
 template class Statistic<float>;
