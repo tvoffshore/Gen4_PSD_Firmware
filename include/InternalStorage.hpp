@@ -26,6 +26,7 @@ enum class SettingsModules
     Measurements,  // Measurements setting id
     GainSelector,  // GainSelector settings id
     InputSelector, // InputSelector settings id
+    VddController, // VddController settings id
 
     Count // Total count of settings modules
 };
@@ -38,6 +39,7 @@ namespace
         14, // Measurements (uint32_t * 2 + uint16_t + uint8_t * 3 + CRC8) = 14
         2,  // GainSelector (uint8_t + CRC8) = 2
         2,  // InputSelector (uint8_t + CRC8) = 2
+        5,  // VddController (float + CRC8) = 5
     };
     static_assert(sizeof(settingsSizeList) / sizeof(*settingsSizeList) == static_cast<size_t>(SettingsModules::Count),
                   "Settings size list doesn't match to modules count!");
