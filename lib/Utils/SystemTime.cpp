@@ -47,11 +47,11 @@ namespace SystemTime
          * @param tm Time elements structure
          * @param string Timestamp string
          */
-        void createTimestamp(const tmElements_t &tm, TimestampString &string)
+        void createTimestamp(const tmElements_t &tm, DateTimeString &string)
         {
             assert(string);
 
-            snprintf((char *)string, sizeof(TimestampString), "%4d%02d%02dT%02d%02d%02d",
+            snprintf((char *)string, sizeof(DateTimeString), "%4d%02d%02dT%02d%02d%02d",
                      tmYearToCalendar(tm.Year), tm.Month, tm.Day, tm.Hour, tm.Minute, tm.Second);
         }
 
@@ -99,9 +99,9 @@ namespace SystemTime
         {
             setSyncProvider(syncProvider);
 
-            TimestampString timestamp;
-            epochToTimestamp(time, timestamp);
-            LOG_INFO("System time initialized: time since epoch %d - %s", time, timestamp);
+            DateTimeString string;
+            epochToTimestamp(time, string);
+            LOG_INFO("System time initialized: time since epoch %d - %s", time, string);
         }
 
         return result;
@@ -271,8 +271,9 @@ namespace SystemTime
      * @brief Get current date and time
      *
      * @param dateTime Current date and time
+     * @return Epoch time
      */
-    void getDateTime(DateTime &dateTime)
+    time_t getDateTime(DateTime &dateTime)
     {
         tmElements_t tm;
 
@@ -287,14 +288,17 @@ namespace SystemTime
         dateTime.Day = tm.Day;
         dateTime.Month = tm.Month;
         dateTime.Year = tm.Year + epochYear;
+
+        return time;
     }
 
     /**
      * @brief Get current date and time packed to human-readable timestamp string
      *
      * @param[in] string String with timestamp
+     * @return Epoch time
      */
-    void getTimestamp(TimestampString &string)
+    time_t getTimestamp(DateTimeString &string)
     {
         tmElements_t tm;
 
@@ -304,6 +308,8 @@ namespace SystemTime
         breakTime(time, tm);
 
         createTimestamp(tm, string);
+
+        return time;
     }
 
     /**
@@ -312,7 +318,7 @@ namespace SystemTime
      * @param epochTime Epoch time
      * @param string human-readable string with time
      */
-    void epochToTimestamp(time_t epochTime, TimestampString &string)
+    void epochToTimestamp(time_t epochTime, DateTimeString &string)
     {
         tmElements_t tm;
 

@@ -20,19 +20,19 @@ namespace SystemTime
     // Time: 2 hour + 2 minute + 2 second = 6 symbols
     typedef char TimeString[6 + 1];
     // Timestamp: 4 year + 2 month + 2 day + 1 "T" + 2 hour + 2 minute + 2 second = 15 symbols
-    typedef char TimestampString[15 + 1];
+    typedef char DateTimeString[15 + 1];
 
     /**
      * @brief Date and time structure
      */
     struct DateTime
     {
-        uint8_t Second;
-        uint8_t Minute;
-        uint8_t Hour;
-        uint8_t Day;
+        uint16_t Year;
         uint8_t Month;
-        uint8_t Year;
+        uint8_t Day;
+        uint8_t Hour;
+        uint8_t Minute;
+        uint8_t Second;
     };
 
     /**
@@ -92,15 +92,17 @@ namespace SystemTime
      * @brief Get current date and time
      *
      * @param dateTime Current date and time
+     * @return Epoch time
      */
-    void getDateTime(DateTime &dateTime);
+    time_t getDateTime(DateTime &dateTime);
 
     /**
      * @brief Get current date and time packed to human-readable timestamp string
      *
      * @param[in] string String with timestamp
+     * @return Epoch time
      */
-    void getTimestamp(TimestampString &string);
+    time_t getTimestamp(DateTimeString &string);
 
     /**
      * @brief Convert epoch time to human-readable timestamp string
@@ -108,5 +110,5 @@ namespace SystemTime
      * @param epochTime Epoch time
      * @param string human-readable string with time
      */
-    void epochToTimestamp(time_t epochTime, TimestampString &string);
+    void epochToTimestamp(time_t epochTime, DateTimeString &string);
 } // namespace SystemTime

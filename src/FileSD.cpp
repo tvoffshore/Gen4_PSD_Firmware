@@ -16,6 +16,8 @@
 
 #include <Debug.hpp>
 
+#include "SystemTime.hpp"
+
 namespace
 {
     // SD chip select pin
@@ -23,8 +25,6 @@ namespace
 
     // Delimiter of directory and filename
     const char *directoryDelimiter = "/";
-    // Logs files extension
-    const char *fileExtension = "csv";
 
     // Bytes to megabytes ratio
     constexpr size_t sectorsToMbFactor = 2 * 1024;
@@ -105,12 +105,14 @@ SdFs &FileSD::sdFs()
  *
  * @param directory Directory name
  * @param fileName File name
+ * @param extension File extension
  * @return True if file has been created successfully, false otherwise
  */
-bool FileSD::create(const char *directory, const char *fileName)
+bool FileSD::create(const char *directory, const char *fileName, const char *extension)
 {
     assert(directory);
     assert(fileName);
+    assert(extension);
 
     if (_file)
     {
@@ -133,14 +135,19 @@ bool FileSD::create(const char *directory, const char *fileName)
         isDirectory = sd.mkdir(directory);
     }
 
-    if (isDirectory)
+    if (isDirectory == true)
     {
         // Create path to new file
-        snprintf(_path, sizeof(_path), "%s%s%s.%s", directory, directoryDelimiter, fileName, fileExtension);
+        snprintf(_path, sizeof(_path), "%s%s%s.%s", directory, directoryDelimiter, fileName, extension);
 
         // Try to open the file with append (if exists) or O_CREAT (if doesn't exist) access
         oflag_t oFlags = O_WRONLY | (sd.exists(_path) ? O_APPEND : O_CREAT);
         _file = sd.open(_path, oFlags);
+        if (_file)
+        {
+            // File was successfully created/opened, add timestamp
+            timestamp((oFlags & O_CREAT) ? T_CREATE | T_ACCESS : T_ACCESS);
+        }
 
         LOG_INFO("File \"%s\" %s %s on SD", _path, _file ? "is" : "isn't", (oFlags & O_CREAT) ? "created" : "opened");
     }
@@ -165,6 +172,11 @@ bool FileSD::open()
         {
             // Try to open file with append access (add new data at the end of the file)
             _file = sd.open(_path, O_WRONLY | O_APPEND);
+            if (_file)
+            {
+                // File was successfully opened, add timestamp
+                timestamp(T_ACCESS);
+            }
 
             LOG_INFO("File \"%s\" %s opened", _path, _file ? "is" : "isn't");
         }
@@ -207,9 +219,15 @@ bool FileSD::print(const char *string)
     if (_file)
     {
         // Print sample data to file
-        size_t printLen = _file.print(string);
-        // Print length should be equal to string length
-        result = (printLen == strlen(string));
+        size_t printedLength = _file.print(string);
+        // Printed length should be equal to the string length
+        result = (printedLength == strlen(string));
+
+        if (printedLength > 0)
+        {
+            // Data was written to the file, add timestamp
+            timestamp(T_WRITE);
+        }
     }
 
     LOG_TRACE("String \"%s\" %s printed to file \"%s\"", string, result ? "is" : "isn't", _path);
@@ -231,10 +249,16 @@ bool FileSD::println(const char *string)
 
     if (_file)
     {
-        // Print sample data to file
-        size_t printLen = _file.println(string);
-        // Print length should be equal to string length + "\r\n"
-        result = (printLen == (strlen(string) + 2));
+        // Print string to file
+        size_t printedLength = _file.println(string);
+        // Printed length should be equal to the string length + "\r\n"
+        result = (printedLength == (strlen(string) + 2));
+
+        if (printedLength > 0)
+        {
+            // Data was written to the file, add timestamp
+            timestamp(T_WRITE);
+        }
     }
 
     LOG_TRACE("String \"%s\" %s printed to file \"%s\"", string, result ? "is" : "isn't", _path);
@@ -258,13 +282,41 @@ bool FileSD::write(const void *buffer, size_t size)
 
     if (_file)
     {
-        // Print sample data to file
-        size_t writeSize = _file.write(buffer, size);
+        // Write buffer to the file
+        size_t writtenBytes = _file.write(buffer, size);
+        // Written bytes should be equal to the buffer size
+        result = (writtenBytes == size);
 
-        result = (writeSize == size);
+        if (writtenBytes > 0)
+        {
+            // Data was written to the file, add timestamp
+            timestamp(T_WRITE);
+        }
     }
 
     LOG_TRACE("Buffer size %d %s written to file \"%s\"", size, result ? "is" : "isn't", _path);
+
+    return result;
+}
+
+/**
+ * @brief Set a file's opration timestamp in its directory entry
+ *
+ * @param flags Type of operation to be timestamped (T_ACCESS, T_CREATE, T_WRITE)
+ * @return true if timestamp was added, false otherwise
+ */
+bool FileSD::timestamp(uint8_t flags)
+{
+    bool result = false;
+
+    if (_file)
+    {
+        SystemTime::DateTime dateTime;
+        SystemTime::getDateTime(dateTime);
+
+        result = _file.timestamp(flags, dateTime.Year, dateTime.Month, dateTime.Day,
+                                 dateTime.Hour, dateTime.Minute, dateTime.Second);
+    }
 
     return result;
 }

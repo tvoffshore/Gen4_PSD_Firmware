@@ -56,9 +56,10 @@ public:
      *
      * @param directory Directory name
      * @param fileName File name
+     * @param extension File extension
      * @return True if file has been created successfully, false otherwise
      */
-    bool create(const char *directory, const char *fileName);
+    bool create(const char *directory, const char *fileName, const char *extension);
 
     /**
      * @brief Open existing file
@@ -98,6 +99,14 @@ public:
      * @return True if buffer has been written to the file, false otherwise
      */
     bool write(const void *buffer, size_t size);
+
+    /**
+     * @brief Set a file's opration timestamp in its directory entry
+     *
+     * @param flags Type of operation to be timestamped (T_ACCESS, T_CREATE, T_WRITE)
+     * @return true if timestamp was added, false otherwise
+     */
+    bool timestamp(uint8_t flags);
 
     /**
      * @brief Get file size
