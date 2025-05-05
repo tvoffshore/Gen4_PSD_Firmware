@@ -52,14 +52,14 @@ namespace Measurements
          *
          * @return Average value
          */
-        double mean() const;
+        float mean() const;
 
         /**
          * @brief Get the standard deviation from the data set
          *
          * @return Deviation value
          */
-        double deviation() const;
+        float deviation() const;
 
     private:
         /**
@@ -72,7 +72,7 @@ namespace Measurements
         bool _isReset = true;
         Type _max;
         Type _min;
-        double _mean;
-        double _deviation;
+        float _mean;
+        float _deviation;
     };
 } // namespace Measurements

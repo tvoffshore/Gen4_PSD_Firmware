@@ -59,7 +59,7 @@ void Statistic<Type>::calculate(const Type *data, size_t size)
 
         updateMaxMin(value);
 
-        _mean += static_cast<double>(value);
+        _mean += static_cast<float>(value);
     }
 
     // Calculate average
@@ -67,7 +67,7 @@ void Statistic<Type>::calculate(const Type *data, size_t size)
 
     for (size_t idx = 0; idx < size; idx++)
     {
-        double diff = static_cast<double>(data[idx]) - _mean;
+        float diff = static_cast<float>(data[idx]) - _mean;
 
         _deviation += (diff * diff);
     }
@@ -105,7 +105,7 @@ Type Statistic<Type>::min() const
  * @return Average value
  */
 template <typename Type>
-double Statistic<Type>::mean() const
+float Statistic<Type>::mean() const
 {
     return _mean;
 }
@@ -116,7 +116,7 @@ double Statistic<Type>::mean() const
  * @return Deviation value
  */
 template <typename Type>
-double Statistic<Type>::deviation() const
+float Statistic<Type>::deviation() const
 {
     return _deviation;
 }

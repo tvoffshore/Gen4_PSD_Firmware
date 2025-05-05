@@ -23,24 +23,24 @@ using namespace Measurements;
 namespace
 {
     // Coefficient for Hamming window correction
-    constexpr double windowCorrection = 1.59;
+    constexpr float windowCorrection = 1.59;
 
     /**
      * Calculate average value for elements
      */
     template <typename T>
-    double getAverage(T *elements, size_t count)
+    float getAverage(T *elements, size_t count)
     {
         assert(elements);
         assert(count > 0);
 
-        double sum = 0;
+        float sum = 0;
         for (size_t idx = 0; idx < count; idx++)
         {
             sum += elements[idx];
         }
 
-        double result = sum / count;
+        float result = sum / count;
         return result;
     }
 
@@ -48,11 +48,11 @@ namespace
     These are the input and output vectors
     Input vectors receive computed results from FFT
     */
-    double vReal[samplesCountMax];
-    double vImag[samplesCountMax];
+    float vReal[samplesCountMax];
+    float vImag[samplesCountMax];
 
     // FFT object
-    auto fft = ArduinoFFT<double>();
+    auto fft = ArduinoFFT<float>();
 } // namespace
 
 /**
@@ -91,10 +91,10 @@ void PSD<Type>::computeSegment(const Type *samples)
         clear();
     }
 
-    double average = getAverage(samples, _sampleCount);
+    float average = getAverage(samples, _sampleCount);
     for (size_t idx = 0; idx < _sampleCount; idx++)
     {
-        vReal[idx] = static_cast<double>(samples[idx]) - average;
+        vReal[idx] = static_cast<float>(samples[idx]) - average;
         vImag[idx] = 0;
     }
 
@@ -104,7 +104,7 @@ void PSD<Type>::computeSegment(const Type *samples)
 
     for (size_t idx = 0; idx < _binCount; idx++)
     {
-        double bin = static_cast<double>(vReal[idx]) * vReal[idx] / _sampleFrequency / _sampleCount;
+        float bin = static_cast<float>(vReal[idx]) * vReal[idx] / _sampleFrequency / _sampleCount;
         if (idx > 0)
         {
             bin *= 2;
@@ -124,13 +124,13 @@ void PSD<Type>::computeSegment(const Type *samples)
  * @return Calculated bins
  */
 template <typename Type>
-const double *PSD<Type>::getResult(PsdBin *pCoreBin)
+const float *PSD<Type>::getResult(PsdBin *pCoreBin)
 {
     if (_segmentCount > 0)
     {
         // Set index to the invalid value first
         size_t binMaxIdx = _sampleCount;
-        double binMaxAmplitude = 0;
+        float binMaxAmplitude = 0;
 
         // Calculate average bins
         for (size_t idx = 0; idx < _binCount; idx++)
@@ -148,7 +148,7 @@ const double *PSD<Type>::getResult(PsdBin *pCoreBin)
             LOG_TRACE("Bin[%d]: %lf", idx, _bins[idx]);
         }
 
-        double deltaFrequency = static_cast<double>(_sampleFrequency) / _sampleCount;
+        float deltaFrequency = static_cast<float>(_sampleFrequency) / _sampleCount;
         _coreBin.frequency = binMaxIdx * deltaFrequency;
         _coreBin.amplitude = binMaxAmplitude;
 

@@ -281,7 +281,7 @@ namespace
     void stopSampling();
     void setupMeasurements(uint8_t sampleCount, uint8_t sampleFrequency);
     void performCalculations(size_t index);
-    void calculateAccelResult(const int16_t *pAccX, double meanAccX, const int16_t *pAccY, double meanAccY, size_t length);
+    void calculateAccelResult(const int16_t *pAccX, float meanAccX, const int16_t *pAccY, float meanAccY, size_t length);
     void saveMeasurements();
     void resetStatistics();
 
@@ -604,18 +604,18 @@ namespace
      * @param pAccY Pointer to accelerometer Y axis data
      * @param length Number of data points
      */
-    void calculateAccelResult(const int16_t *pAccX, double meanAccX, const int16_t *pAccY, double meanAccY, size_t length)
+    void calculateAccelResult(const int16_t *pAccX, float meanAccX, const int16_t *pAccY, float meanAccY, size_t length)
     {
-        double sumX = 0;
-        double sumY = 0;
-        double sumX2 = 0;
-        double sumXY = 0;
+        float sumX = 0;
+        float sumY = 0;
+        float sumX2 = 0;
+        float sumXY = 0;
 
         for (size_t idx = 0; idx < length; idx++)
         {
             // Remove mean
-            double x = rawAccelToMs2(pAccX[idx] - meanAccX);
-            double y = rawAccelToMs2(pAccY[idx] - meanAccY);
+            float x = rawAccelToMs2(pAccX[idx] - meanAccX);
+            float y = rawAccelToMs2(pAccY[idx] - meanAccY);
 
             // Calculate sums
             sumX += x;
@@ -624,20 +624,20 @@ namespace
             sumXY += x * y;
         }
 
-        double numerator = length * sumXY - sumX * sumY;
-        double denominator = length * sumX2 - sumX * sumX;
+        float numerator = length * sumXY - sumX * sumY;
+        float denominator = length * sumX2 - sumX * sumX;
         if (denominator != 0.0)
         {
             // Calculate slope
-            double slope = numerator / denominator;
+            float slope = numerator / denominator;
 
             // Calculate theta angle
-            double theta = atan(slope);
+            float theta = atan(slope);
 
             for (size_t idx = 0; idx < length; idx++)
             {
-                double x = rawAccelToMs2(pAccX[idx] - meanAccX);
-                double y = rawAccelToMs2(pAccY[idx] - meanAccY);
+                float x = rawAccelToMs2(pAccX[idx] - meanAccX);
+                float y = rawAccelToMs2(pAccY[idx] - meanAccY);
 
                 accelResult[idx] = x * cos(theta) + y * sin(theta);
             }
@@ -674,13 +674,13 @@ namespace
         Measurements::PsdBin coreBinGyroY;
         Measurements::PsdBin coreBinAccResult;
 
-        const double *resultPsdAdc1 = psdAdc1.getResult(&coreBinAdc1);
-        const double *resultPsdAdc2 = psdAdc2.getResult(&coreBinAdc2);
-        const double *resultPsdAccX = psdAccX.getResult(&coreBinAccX);
-        const double *resultPsdAccY = psdAccY.getResult(&coreBinAccY);
-        const double *resultPsdGyroX = psdGyroX.getResult(&coreBinGyroX);
-        const double *resultPsdGyroY = psdGyroY.getResult(&coreBinGyroY);
-        const double *resultPsdAccResult = psdAccResult.getResult(&coreBinAccResult);
+        const float *resultPsdAdc1 = psdAdc1.getResult(&coreBinAdc1);
+        const float *resultPsdAdc2 = psdAdc2.getResult(&coreBinAdc2);
+        const float *resultPsdAccX = psdAccX.getResult(&coreBinAccX);
+        const float *resultPsdAccY = psdAccY.getResult(&coreBinAccY);
+        const float *resultPsdGyroX = psdGyroX.getResult(&coreBinGyroX);
+        const float *resultPsdGyroY = psdGyroY.getResult(&coreBinGyroY);
+        const float *resultPsdAccResult = psdAccResult.getResult(&coreBinAccResult);
 
         Battery::Status batteryStatus = Battery::readStatus();
 

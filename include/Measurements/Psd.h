@@ -25,8 +25,8 @@ namespace Measurements
      */
     struct PsdBin
     {
-        double frequency;
-        double amplitude;
+        float frequency;
+        float amplitude;
     };
 
     template <typename Type>
@@ -55,7 +55,7 @@ namespace Measurements
          * @param[out] coreBin Pointer to the core (maximum amplitude) bin in the results (nullptr if no need)
          * @return Calculated bins
          */
-        const double *getResult(PsdBin *pCoreBin = nullptr);
+        const float *getResult(PsdBin *pCoreBin = nullptr);
 
     private:
         /**
@@ -70,6 +70,6 @@ namespace Measurements
 
         PsdBin _coreBin; // Core (maximum amplitude) bin
 
-        double _bins[samplesCountMax / 2 + 1]; // PSD results (only the first N/2 + 1 are usefull, where N = sampleCount)
+        float _bins[samplesCountMax / 2 + 1]; // PSD results (only the first N/2 + 1 are usefull, where N = sampleCount)
     };
 } // namespace Measurements
