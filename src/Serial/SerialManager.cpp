@@ -1,9 +1,10 @@
 #include "Serial/SerialManager.hpp"
 
 #include <assert.h>
-#include <Debug.hpp>
 
-#include "InternalStorage.hpp"
+#include <Log.hpp>
+#include <Settings.hpp>
+
 #include "Serial/SerialCommands.hpp"
 #include "Serial/SerialDevice.hpp"
 #include "Serial/Interfaces/Max3221.hpp"
@@ -24,7 +25,7 @@ namespace
     constexpr uint8_t defaultSerialSelect = static_cast<uint8_t>(SerialSelect::RS232);
 
     // Settings identifier in internal storage
-    constexpr auto settingsId = SettingsModules::SerialManager;
+    constexpr auto settingsId = Settings::Id::SerialManager;
 
     /**
      * @brief Serial device identifiers
@@ -42,7 +43,7 @@ namespace
     /**
      * @brief Non volatile settings structure
      */
-    struct Settings
+    struct SerialSettings
     {
         int slaveAddress;     // Slave address of the serial devices
         uint8_t serialSelect; // Serial interface selection @ref SerialSelect
@@ -72,7 +73,7 @@ namespace
     std::array<std::array<CommandNotifyHandler, notifiersMaxCount>, static_cast<size_t>(CommandId::Commands)> commandsNotifiers; // Commands notifiers
 
     // Serial manager settings
-    Settings settings = {.slaveAddress = defaultSlaveAddress, .serialSelect = defaultSerialSelect};
+    SerialSettings settings = {.slaveAddress = defaultSlaveAddress, .serialSelect = defaultSerialSelect};
 
     // Function prototypes
     void selectSerialInterface(uint8_t serialSelect);
@@ -98,7 +99,7 @@ namespace
         if (serialSelect != settings.serialSelect)
         {
             settings.serialSelect = serialSelect;
-            InternalStorage::updateSettings(settingsId, settings);
+            Settings::update(settingsId, settings);
         }
 
         if (serialSelect == static_cast<uint8_t>(SerialSelect::RS232))
@@ -275,7 +276,7 @@ namespace
                                           LOG_INFO("Set new address: %d", address);
 
                                           settings.slaveAddress = address;
-                                          InternalStorage::updateSettings(settingsId, settings);
+                                          Settings::update(settingsId, settings);
 
                                           for (auto &device : serialDevices)
                                           {
@@ -312,7 +313,7 @@ void Manager::initialize()
         notifiers.fill(nullptr);
     }
 
-    InternalStorage::readSettings(settingsId, settings);
+    Settings::read(settingsId, settings);
 
     // Initialize serial devices
     for (auto &device : serialDevices)

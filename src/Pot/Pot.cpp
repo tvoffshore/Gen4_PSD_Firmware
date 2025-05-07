@@ -14,7 +14,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <Debug.hpp>
+#include <Log.hpp>
 
 #include "Pot/Mcp45hv.hpp"
 

@@ -10,7 +10,8 @@
  */
 
 // Lib headers
-#include <Debug.hpp>
+#include <Log.hpp>
+#include <Settings.hpp>
 #include <SystemTime.hpp>
 
 // Source headers
@@ -18,17 +19,8 @@
 #include "Board.h"
 #include "FileSD.hpp"
 #include "FwVersion.hpp"
-#include "InternalStorage.hpp"
 #include "Measurements/MeasureManager.h"
 #include "Serial/SerialManager.hpp"
-
-#if (LOG_LEVEL > LOG_LEVEL_NONE)
-// Log level declaration
-uint8_t LogsOutput::logLevelMax = LOG_LEVEL;
-#endif // #if (LOG_LEVEL > LOG_LEVEL_NONE)
-
-// Modules settings EEPROM addresses declaration
-std::array<size_t, static_cast<size_t>(SettingsModules::Count)> InternalStorage::settingsAddressList;
 
 /**
  * @brief Register serial read command handlers
@@ -62,7 +54,8 @@ void registerSerialReadHandlers()
     Serials::Manager::subscribeToRead(Serials::CommandId::LogLevel,
                                       [](const char **responseString)
                                       {
-                                          snprintf(dataString, sizeof(dataString), "%u", LOG_GET_LEVEL());
+                                          uint8_t logLevel = Log::getMaxLevel();
+                                          snprintf(dataString, sizeof(dataString), "%u", logLevel);
                                           *responseString = dataString;
                                       });
 
@@ -107,7 +100,7 @@ void registerSerialWriteHandlers()
                                        [](const char *dataString)
                                        {
                                            uint8_t logLevel = atoi(dataString);
-                                           LOG_SET_LEVEL(logLevel);
+                                           Log::setMaxLevel(logLevel);
                                        });
 }
 
@@ -119,8 +112,13 @@ void setup()
     // Setup the board first
     Board::setup();
 
-    // Initialize internal storage
-    InternalStorage::initialize();
+    LOG_INFO("Application started, version %s", FwVersion::getVersionString());
+
+    // Initialize settings first
+    Settings::initialize();
+
+    // Initialize the log module
+    Log::initialize();
 
     // Initialize battery reading
     Battery::initialize();

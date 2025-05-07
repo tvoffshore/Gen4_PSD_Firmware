@@ -5,7 +5,7 @@
 #include <Arduino.h>
 #include <TimeLib.h>
 
-#include <Debug.hpp>
+#include <Log.hpp>
 #include <Rtc.hpp>
 
 namespace SystemTime
@@ -89,7 +89,7 @@ namespace SystemTime
      */
     bool initialize(TwoWire &wire)
     {
-        LOG_INFO("Initialize system time...");
+        LOG_DEBUG("Initialize system time...");
 
         pWire = &wire;
 

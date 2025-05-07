@@ -14,7 +14,7 @@
 #include <assert.h>
 #include <string.h>
 
-#include <Debug.hpp>
+#include <Log.hpp>
 
 #include "SystemTime.hpp"
 
@@ -43,7 +43,7 @@ namespace
  */
 bool FileSD::startFileSystem(uint32_t frequency)
 {
-    LOG_INFO("Start SD file system...");
+    LOG_DEBUG("Start SD file system...");
 
     bool result = sd.begin(pinCS, frequency);
     if (result == true)

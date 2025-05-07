@@ -16,7 +16,8 @@
 #include <stdint.h>
 
 #include <arduinoFFT.h>
-#include <Debug.hpp>
+
+#include <Log.hpp>
 
 using namespace Measurements;
 

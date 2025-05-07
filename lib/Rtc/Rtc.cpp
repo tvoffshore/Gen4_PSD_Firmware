@@ -1,6 +1,6 @@
 #include "Rtc.hpp"
 
-#include <Debug.hpp>
+#include <Log.hpp>
 
 namespace RTC
 {

@@ -11,7 +11,7 @@
 
 #include "IoExpander/IoExpander.hpp"
 
-#include <Debug.hpp>
+#include <Log.hpp>
 
 #include "IoExpander/Tca9534.hpp"
 
@@ -33,7 +33,7 @@ namespace
     static_assert(sizeof(pinMask) / sizeof(*pinMask) == static_cast<size_t>(Pin::Count));
 
     // Module initialization flag
-    bool _isInitialized = false;
+    bool isInitialized = false;
 } // namespace
 
 /**
@@ -49,7 +49,7 @@ bool IoExpander::initialize()
     if (result == true)
     {
         LOG_INFO("IO expander initialized");
-        _isInitialized = true;
+        isInitialized = true;
     }
 
     return result;
@@ -80,7 +80,7 @@ bool IoExpander::initializePin(Pin pin, PinConfig config)
  */
 bool IoExpander::initializePins(uint8_t mask, PinConfig config)
 {
-    if (_isInitialized == false)
+    if (isInitialized == false)
     {
         LOG_WARNING("IO expander isn't initialized");
         return false;
@@ -143,7 +143,7 @@ bool IoExpander::setPin(Pin pin)
  */
 bool IoExpander::setPins(uint8_t mask)
 {
-    if (_isInitialized == false)
+    if (isInitialized == false)
     {
         LOG_WARNING("IO expander isn't initialized");
         return false;
@@ -192,7 +192,7 @@ bool IoExpander::resetPin(Pin pin)
  */
 bool IoExpander::resetPins(uint8_t mask)
 {
-    if (_isInitialized == false)
+    if (isInitialized == false)
     {
         LOG_WARNING("IO expander isn't initialized");
         return false;
@@ -241,7 +241,7 @@ bool IoExpander::togglePin(Pin pin)
  */
 bool IoExpander::togglePins(uint8_t mask)
 {
-    if (_isInitialized == false)
+    if (isInitialized == false)
     {
         LOG_WARNING("IO expander isn't initialized");
         return false;
@@ -275,7 +275,7 @@ bool IoExpander::togglePins(uint8_t mask)
  */
 bool IoExpander::readPin(Pin pin, bool &state)
 {
-    if (_isInitialized == false)
+    if (isInitialized == false)
     {
         LOG_WARNING("IO expander isn't initialized");
         return false;

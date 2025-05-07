@@ -14,12 +14,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <Debug.hpp>
 #include <driver/gpio.h>
 #include <driver/rtc_io.h>
 #include <esp_sleep.h>
 #include <SPI.h>
 #include <Wire.h>
+
+#include <Log.hpp>
 
 #include "Serial/Interfaces/Max3221.hpp"
 #include "Serial/Interfaces/St3485.hpp"

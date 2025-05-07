@@ -13,7 +13,7 @@
 
 #include <stddef.h>
 
-#include <Debug.hpp>
+#include <Log.hpp>
 
 #include "Board.h"
 

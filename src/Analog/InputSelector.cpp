@@ -13,9 +13,9 @@
 
 #include <stdint.h>
 
-#include <Debug.hpp>
+#include <Log.hpp>
+#include <Settings.hpp>
 
-#include "InternalStorage.hpp"
 #include "IoExpander/IoExpander.hpp"
 
 using namespace Analog;
@@ -43,23 +43,23 @@ namespace
     // Default gain selection
     constexpr auto inputTypeDefault = InputType::In2Out;
     // Settings identifier in internal storage
-    constexpr auto settingsId = SettingsModules::InputSelector;
+    constexpr auto settingsId = Settings::Id::InputSelector;
 
 #pragma pack(push, 1)
     /**
      * @brief Non volatile settings structure for input selector
      */
-    struct Settings
+    struct InputSettings
     {
         InputType inputType; // The selected input
     };
 #pragma pack(pop)
 
     // Settings for input selector
-    Settings _settings = {.inputType = inputTypeDefault};
+    InputSettings settings = {.inputType = inputTypeDefault};
 
     // Module initialization flag
-    bool _isInitialized = false;
+    bool isInitialized = false;
 } // namespace
 
 /**
@@ -71,7 +71,7 @@ bool InputSelector::initialize()
 {
     LOG_DEBUG("Initialize input type selector...");
 
-    InternalStorage::readSettings(settingsId, _settings);
+    Settings::read(settingsId, settings);
 
     // Initialize A0, A1 and EN pins as output
     bool result = IoExpander::initializePins(pinMaskA0 | pinMaskA1 | pinMaskEn, IoExpander::PinConfig::Output);
@@ -95,9 +95,9 @@ bool InputSelector::initialize()
         return false;
     }
 
-    _isInitialized = true;
+    isInitialized = true;
 
-    result = setInputType(_settings.inputType);
+    result = setInputType(settings.inputType);
     if (result == false)
     {
         LOG_ERROR("Initial input type set fail!");
@@ -105,7 +105,7 @@ bool InputSelector::initialize()
     }
 
     LOG_INFO("Input type selector initialized, input type %s",
-             inputTypeString[static_cast<size_t>(_settings.inputType)]);
+             inputTypeString[static_cast<size_t>(settings.inputType)]);
 
     return result;
 }
@@ -117,7 +117,7 @@ bool InputSelector::initialize()
  */
 InputType InputSelector::inputType()
 {
-    return _settings.inputType;
+    return settings.inputType;
 }
 
 /**
@@ -128,7 +128,7 @@ InputType InputSelector::inputType()
  */
 bool InputSelector::setInputType(InputType inputType)
 {
-    if (_isInitialized == false)
+    if (isInitialized == false)
     {
         LOG_ERROR("InputSelector isn't initialized!");
         return false;
@@ -180,10 +180,10 @@ bool InputSelector::setInputType(InputType inputType)
         LOG_ERROR("IO expander pins set fail!");
     }
 
-    if (_settings.inputType != inputType)
+    if (settings.inputType != inputType)
     {
-        _settings.inputType = inputType;
-        InternalStorage::updateSettings(settingsId, _settings);
+        settings.inputType = inputType;
+        Settings::update(settingsId, settings);
     }
 
     return result;

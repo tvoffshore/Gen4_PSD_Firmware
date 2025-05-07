@@ -1,6 +1,6 @@
 #include "Serial/SerialDevice.hpp"
 
-#include <Debug.hpp>
+#include <Log.hpp>
 
 using namespace Serials;
 
@@ -57,7 +57,7 @@ void SerialDevice::initialize(ReadHandler &&readHandler, WriteHandler &&writeHan
 
     _serialInterface.initialize();
 
-    LOG_INFO("Serial device is initialized, interface: %s", _serialInterface.getInfo());
+    LOG_INFO("Serial device initialized, interface: %s", _serialInterface.getInfo());
 }
 
 /**

@@ -14,8 +14,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <Debug.hpp>
 #include <Wire.h>
+
+#include <Log.hpp>
 
 using namespace IoExpander;
 

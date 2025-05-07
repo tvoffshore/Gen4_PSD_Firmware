@@ -9,7 +9,7 @@
 
 #include "IIM42652.h"
 
-#include <Debug.hpp>
+#include <Log.hpp>
 
 /*!
  *  @brief  Initialize the class.

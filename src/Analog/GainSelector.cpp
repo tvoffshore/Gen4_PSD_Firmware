@@ -14,9 +14,9 @@
 #include <stdint.h>
 
 #include <Arduino.h>
-#include <Debug.hpp>
 
-#include "InternalStorage.hpp"
+#include <Log.hpp>
+#include <Settings.hpp>
 
 using namespace Analog;
 
@@ -34,23 +34,23 @@ namespace
     // Default gain
     constexpr auto gainDefault = Gain::Gain100;
     // Settings identifier in internal storage
-    constexpr auto settingsId = SettingsModules::GainSelector;
+    constexpr auto settingsId = Settings::Id::GainSelector;
 
 #pragma pack(push, 1)
     /**
      * @brief Non volatile settings structure for gain selector
      */
-    struct Settings
+    struct GainSettings
     {
         Gain gain; // The selected gain
     };
 #pragma pack(pop)
 
     // Settings for gain selector
-    Settings _settings = {.gain = gainDefault};
+    GainSettings settings = {.gain = gainDefault};
 
     // Module initialization flag
-    bool _isInitialized = false;
+    bool isInitialized = false;
 } // namespace
 
 /**
@@ -63,17 +63,17 @@ bool GainSelector::initialize()
 {
     LOG_DEBUG("Initialize gain selector...");
 
-    InternalStorage::readSettings(settingsId, _settings);
+    Settings::read(settingsId, settings);
 
     // Initialize output control pins
     pinMode(pinA0, OUTPUT);
     pinMode(pinA1, OUTPUT);
 
-    _isInitialized = true;
+    isInitialized = true;
 
-    setGain(_settings.gain);
+    setGain(settings.gain);
 
-    LOG_INFO("Gain selector initialized, gain %s", gainString[static_cast<size_t>(_settings.gain)]);
+    LOG_INFO("Gain selector initialized, gain %s", gainString[static_cast<size_t>(settings.gain)]);
 
     return true;
 }
@@ -85,7 +85,7 @@ bool GainSelector::initialize()
  */
 Gain GainSelector::gain()
 {
-    return _settings.gain;
+    return settings.gain;
 }
 
 /**
@@ -95,7 +95,7 @@ Gain GainSelector::gain()
  */
 void GainSelector::setGain(Gain gain)
 {
-    if (_isInitialized == false)
+    if (isInitialized == false)
     {
         LOG_ERROR("GainSelector isn't initialized!");
         return;
@@ -129,9 +129,9 @@ void GainSelector::setGain(Gain gain)
         break;
     }
 
-    if (_settings.gain != gain)
+    if (settings.gain != gain)
     {
-        _settings.gain = gain;
-        InternalStorage::updateSettings(settingsId, _settings);
+        settings.gain = gain;
+        Settings::update(settingsId, settings);
     }
 }

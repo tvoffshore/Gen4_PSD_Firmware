@@ -14,9 +14,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <Debug.hpp>
+#include <Log.hpp>
+#include <Settings.hpp>
 
-#include "InternalStorage.hpp"
 #include "IoExpander/IoExpander.hpp"
 #include "Pot/Pot.hpp"
 
@@ -54,23 +54,23 @@ namespace
     constexpr size_t stableDelayMaxMs = 30000;
 
     // Settings identifier in internal storage
-    constexpr auto settingsId = SettingsModules::VddController;
+    constexpr auto settingsId = Settings::Id::VddController;
 
 #pragma pack(push, 1)
     /**
      * @brief Non volatile settings structure for voltage controller
      */
-    struct Settings
+    struct VddSettings
     {
         float targetVoltage; // The target voltage to apply to ADC sensor, Volts
     };
 #pragma pack(pop)
 
     // Settings for voltage controller
-    Settings _settings = {.targetVoltage = voltageDefault};
+    VddSettings settings = {.targetVoltage = voltageDefault};
 
     // Module initialization flag
-    bool _isInitialized = false;
+    bool isInitialized = false;
 
     /**
      * @brief Convert DCDC voltage to POT resistance that is needed to generate this voltage
@@ -302,9 +302,9 @@ bool VddController::initialize()
 {
     LOG_DEBUG("Initialize voltage controller...");
 
-    InternalStorage::readSettings(settingsId, _settings);
+    Settings::read(settingsId, settings);
 
-    setVoltage(_settings.targetVoltage);
+    setVoltage(settings.targetVoltage);
 
     pinMode(pinVddSens, INPUT);
 
@@ -340,11 +340,11 @@ bool VddController::initialize()
     }
 #endif
 
-    _isInitialized = true;
+    isInitialized = true;
 
     LOG_INFO("Voltage controller initialized");
 
-    return _isInitialized;
+    return isInitialized;
 }
 
 /**
@@ -375,7 +375,7 @@ bool VddController::applyVoltage()
 {
     bool result = false;
 
-    if (_isInitialized == false)
+    if (isInitialized == false)
     {
         LOG_WARNING("VddController isn't initialized yet");
         goto end;
@@ -389,7 +389,7 @@ bool VddController::applyVoltage()
         goto end;
     }
 
-    result = setVoltage(_settings.targetVoltage);
+    result = setVoltage(settings.targetVoltage);
     if (result == false)
     {
         LOG_ERROR("Set POT resistance fail!");
@@ -405,7 +405,7 @@ bool VddController::applyVoltage()
     }
 
     // Adjust POT resistance according to measured voltage
-    result = adjustVoltage(_settings.targetVoltage);
+    result = adjustVoltage(settings.targetVoltage);
     if (result == false)
     {
         LOG_ERROR("Adjust POT resistance fail!");
@@ -444,7 +444,7 @@ float VddController::measureVoltage()
  */
 float VddController::targetVoltage()
 {
-    return _settings.targetVoltage;
+    return settings.targetVoltage;
 }
 
 /**
@@ -465,9 +465,9 @@ void VddController::setTargetVoltage(float voltage)
 
     LOG_DEBUG("Set sensor target voltage to %.1fV", voltage);
 
-    if (_settings.targetVoltage != voltage)
+    if (settings.targetVoltage != voltage)
     {
-        _settings.targetVoltage = voltage;
-        InternalStorage::updateSettings(settingsId, _settings);
+        settings.targetVoltage = voltage;
+        Settings::update(settingsId, settings);
     }
 }
