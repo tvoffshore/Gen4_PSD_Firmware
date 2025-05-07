@@ -17,13 +17,15 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <Debug.hpp>
+#include <Wire.h>
+
 #include <Events.h>
 #include <IIM42652.h>
 #include <MadgwickAHRS.h>
+#include <Log.hpp>
 #include <SdFat.h>
+#include <Settings.hpp>
 #include <SystemTime.hpp>
-#include <Wire.h>
 
 #include "Analog/GainSelector.hpp"
 #include "Analog/InputSelector.hpp"
@@ -33,7 +35,6 @@
 #include "Board.h"
 #include "FileSD.hpp"
 #include "FwVersion.hpp"
-#include "InternalStorage.hpp"
 #include "IoExpander/IoExpander.hpp"
 #include "Measurements/Psd.h"
 #include "Measurements/Statistic.h"
@@ -85,7 +86,7 @@ namespace
     constexpr uint8_t statisticStateDefault = 1;
 
     // Settings identifier in internal storage
-    constexpr auto settingsId = SettingsModules::Measurements;
+    constexpr auto settingsId = Settings::Id::Measurements;
 
     // Accelerometer range, G
     constexpr size_t accelRangeG = 2; // 2, 4, 8, 16
@@ -101,6 +102,23 @@ namespace
     constexpr uint32_t imuWaitValidDelayMs = 1;
     // Timeout of waiting for the valid IMU axis values, milliseconds
     constexpr uint32_t imuWaitValidTimeoutMs = 100;
+
+    // CSV files
+    const char *directoryCsv = "CSV";
+    const char *fileExtensionCsv = "csv";
+    // BIN files
+    const char *directoryBinPsdAdc1 = "BIN/PSD/ADC1";
+    const char *directoryBinPsdAdc2 = "BIN/PSD/ADC2";
+    const char *directoryBinPsdAccel = "BIN/PSD/ACC";
+    const char *directoryBinPsdGyro = "BIN/PSD/GYR";
+    const char *directoryBinPsdAccelResult = "BIN/PSD/ACC_RES";
+    const char *directoryBinStatAdc1 = "BIN/STAT/ADC1";
+    const char *directoryBinStatAdc2 = "BIN/STAT/ADC2";
+    const char *directoryBinStatAccel = "BIN/STAT/ACC";
+    const char *directoryBinStatGyro = "BIN/STAT/GYR";
+    const char *directoryBinStatAccelResult = "BIN/STAT/ACC_RES";
+    const char *directoryBinStatAngle = "BIN/STAT/ANG";
+    const char *fileExtensionBin = "bin";
 
     namespace EventBits
     {
@@ -136,7 +154,7 @@ namespace
     /**
      * @brief Non volatile settings structure
      */
-    struct Settings
+    struct MeasureSettings
     {
         uint32_t measureInterval; // Time for measuring, seconds
         uint32_t pauseInterval;   // Time between measurements, seconds
@@ -178,10 +196,12 @@ namespace
         size_t segmentSize;
         // Time of segment accumulating, milliseconds
         size_t segmentTimeMs;
-        // Interval between IMU samples, milliseconds
-        size_t imuIntervalMs;
+        // Interval between samples, milliseconds
+        size_t sampleTimeMs;
         // Start measurements date and time
         SystemTime::DateTime startDateTime;
+        // Start measurements epoch time
+        time_t startEpochTime;
 
         /**
          * @brief Setup new context
@@ -199,13 +219,13 @@ namespace
             segmentCount = 0;
             // Determine segment size
             segmentSize = pow2[pointsPsd];
-            // Calculate interval between IMU samples
-            imuIntervalMs = millisPerSecond / sampleFrequency;
+            // Calculate interval between samples
+            sampleTimeMs = millisPerSecond / sampleFrequency;
             // Calculate time of segment accumulating
-            segmentTimeMs = segmentSize * imuIntervalMs;
+            segmentTimeMs = segmentSize * sampleTimeMs;
 
             // Obtain measurements start date and time
-            SystemTime::getDateTime(startDateTime);
+            startEpochTime = SystemTime::getDateTime(startDateTime);
         }
     };
 
@@ -262,7 +282,7 @@ namespace
     Measurements::Statistic<float> statisticAccelResult;
 
     // Measurements settings
-    Settings settings = {
+    MeasureSettings settings = {
         .measureInterval = measureIntervalDefault,
         .pauseInterval = pauseIntervalDefault,
         .pointsCutoff = pointsCutoffDefault,
@@ -527,7 +547,7 @@ namespace
         context.setup(pointsPsd, sampleFrequency);
 
         LOG_INFO("PSD setup: segment size %d samples, sample time %d ms, segment time %d ms",
-                 context.segmentSize, context.imuIntervalMs, context.segmentTimeMs);
+                 context.segmentSize, context.sampleTimeMs, context.segmentTimeMs);
 
         // Setup madgwick's IMU and AHRS filter
         madgwickFilter.begin(sampleFrequency);
@@ -682,14 +702,16 @@ namespace
         const float *resultPsdGyroY = psdGyroY.getResult(&coreBinGyroY);
         const float *resultPsdAccResult = psdAccResult.getResult(&coreBinAccResult);
 
+        SystemTime::DateTimeString dateTimeString;
+        time_t epochTime = SystemTime::getTimestamp(dateTimeString);
         Battery::Status batteryStatus = Battery::readStatus();
-
-        SystemTime::TimestampString timestamp;
-        SystemTime::getTimestamp(timestamp);
-
+        char directoryName[30];
+        char fileName[30];
         FileSD _file;
-        _file.create("PSD", timestamp);
-        bool isOpen = _file.open();
+
+        // CSV
+        snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryCsv, dateTimeString);
+        bool isOpen = _file.create(directoryName, dateTimeString, fileExtensionCsv);
         if (isOpen == true)
         {
             char string[100];
@@ -916,6 +938,89 @@ namespace
             _file.close();
         }
 
+        // BIN/PSD/ADC1
+        snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryBinPsdAdc1, dateTimeString);
+        snprintf(fileName, sizeof(fileName), "%u", epochTime);
+        isOpen = _file.create(directoryName, fileName, fileExtensionBin);
+        if (isOpen == true)
+        {
+            _file.write(&context.startEpochTime, sizeof(context.startEpochTime));
+
+            _file.write(&coreBinAdc1.frequency, sizeof(coreBinAdc1.frequency));
+            _file.write(&coreBinAdc1.amplitude, sizeof(coreBinAdc1.amplitude));
+            _file.write(resultPsdAdc1, resultPoints * sizeof(*resultPsdAdc1));
+
+            _file.close();
+        }
+
+        // BIN/PSD/ADC2
+        snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryBinPsdAdc2, dateTimeString);
+        snprintf(fileName, sizeof(fileName), "%u", epochTime);
+        isOpen = _file.create(directoryName, fileName, fileExtensionBin);
+        if (isOpen == true)
+        {
+            _file.write(&context.startEpochTime, sizeof(context.startEpochTime));
+
+            _file.write(&coreBinAdc2.frequency, sizeof(coreBinAdc2.frequency));
+            _file.write(&coreBinAdc2.amplitude, sizeof(coreBinAdc2.amplitude));
+            _file.write(resultPsdAdc2, resultPoints * sizeof(*resultPsdAdc2));
+
+            _file.close();
+        }
+
+        // BIN/PSD/ACC
+        snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryBinPsdAccel, dateTimeString);
+        snprintf(fileName, sizeof(fileName), "%u", epochTime);
+        isOpen = _file.create(directoryName, fileName, fileExtensionBin);
+        if (isOpen == true)
+        {
+            _file.write(&context.startEpochTime, sizeof(context.startEpochTime));
+
+            _file.write(&coreBinAccX.frequency, sizeof(coreBinAccX.frequency));
+            _file.write(&coreBinAccX.amplitude, sizeof(coreBinAccX.amplitude));
+            _file.write(resultPsdAccX, resultPoints * sizeof(*resultPsdAccX));
+
+            _file.write(&coreBinAccY.frequency, sizeof(coreBinAccY.frequency));
+            _file.write(&coreBinAccY.amplitude, sizeof(coreBinAccY.amplitude));
+            _file.write(resultPsdAccY, resultPoints * sizeof(*resultPsdAccY));
+
+            _file.close();
+        }
+
+        // BIN/PSD/GYR
+        snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryBinPsdGyro, dateTimeString);
+        snprintf(fileName, sizeof(fileName), "%u", epochTime);
+        isOpen = _file.create(directoryName, fileName, fileExtensionBin);
+        if (isOpen == true)
+        {
+            _file.write(&context.startEpochTime, sizeof(context.startEpochTime));
+
+            _file.write(&coreBinGyroX.frequency, sizeof(coreBinGyroX.frequency));
+            _file.write(&coreBinGyroX.amplitude, sizeof(coreBinGyroX.amplitude));
+            _file.write(resultPsdGyroX, resultPoints * sizeof(*resultPsdGyroX));
+
+            _file.write(&coreBinGyroY.frequency, sizeof(coreBinGyroY.frequency));
+            _file.write(&coreBinGyroY.amplitude, sizeof(coreBinGyroY.amplitude));
+            _file.write(resultPsdGyroY, resultPoints * sizeof(*resultPsdGyroY));
+
+            _file.close();
+        }
+
+        // BIN/PSD/ACC_RES
+        snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryBinPsdAccelResult, dateTimeString);
+        snprintf(fileName, sizeof(fileName), "%u", epochTime);
+        isOpen = _file.create(directoryName, fileName, fileExtensionBin);
+        if (isOpen == true)
+        {
+            _file.write(&context.startEpochTime, sizeof(context.startEpochTime));
+
+            _file.write(&coreBinAccResult.frequency, sizeof(coreBinAccResult.frequency));
+            _file.write(&coreBinAccResult.amplitude, sizeof(coreBinAccResult.amplitude));
+            _file.write(resultPsdAccResult, resultPoints * sizeof(*resultPsdAccResult));
+
+            _file.close();
+        }
+
         LOG_DEBUG("ADC_1: Max %d, Min %d, Mean %f, Standard Deviation %f, Core Frequency %lfHz - %lf",
                   statisticAdc1.max(), statisticAdc1.min(), statisticAdc1.mean(), statisticAdc1.deviation(),
                   coreBinAdc1.frequency, coreBinAdc1.amplitude);
@@ -1119,7 +1224,7 @@ namespace
             while ((events & EventBits::stopTask) == 0)
             {
                 // Wait for the next cycle
-                xWasDelayed = xTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(context.imuIntervalMs));
+                xWasDelayed = xTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(context.sampleTimeMs));
 
                 // Perform action here. xWasDelayed value can be used to determine
                 // whether a deadline was missed if the code here took too long
@@ -1246,7 +1351,7 @@ namespace
 
                                                // Update measure frequency setting
                                                settings.frequency = value;
-                                               InternalStorage::updateSettings(settingsId, settings);
+                                               Settings::update(settingsId, settings);
 
                                                // Restart measurements
                                                setupMeasurements(settings.pointsPsd, settings.frequency);
@@ -1262,7 +1367,7 @@ namespace
 
                                                // Update measure interval setting
                                                settings.measureInterval = value;
-                                               InternalStorage::updateSettings(settingsId, settings);
+                                               Settings::update(settingsId, settings);
                                            });
 
         Serials::Manager::subscribeToWrite(Serials::CommandId::PauseInterval,
@@ -1272,7 +1377,7 @@ namespace
 
                                                // Update pause interval setting
                                                settings.pauseInterval = value;
-                                               InternalStorage::updateSettings(settingsId, settings);
+                                               Settings::update(settingsId, settings);
                                            });
 
         Serials::Manager::subscribeToWrite(Serials::CommandId::PointsPsd,
@@ -1294,7 +1399,7 @@ namespace
 
                                                // Update points to calculate PSD segment size
                                                settings.pointsPsd = value;
-                                               InternalStorage::updateSettings(settingsId, settings);
+                                               Settings::update(settingsId, settings);
 
                                                // Restart measurements
                                                setupMeasurements(settings.pointsPsd, settings.frequency);
@@ -1319,7 +1424,7 @@ namespace
 
                                                // Update points to store the PSD results setting
                                                settings.pointsCutoff = value;
-                                               InternalStorage::updateSettings(settingsId, settings);
+                                               Settings::update(settingsId, settings);
                                            });
 
         Serials::Manager::subscribeToWrite(Serials::CommandId::StatisticState,
@@ -1329,7 +1434,7 @@ namespace
 
                                                // Update state of statistic setting
                                                settings.statisticState = value;
-                                               InternalStorage::updateSettings(settingsId, settings);
+                                               Settings::update(settingsId, settings);
                                            });
     }
 } // namespace
@@ -1342,7 +1447,7 @@ namespace
 bool Manager::initialize()
 {
     // Read settings
-    InternalStorage::readSettings(settingsId, settings);
+    Settings::read(settingsId, settings);
 
     // Register local serial handlers
     registerSerialReadHandlers();
