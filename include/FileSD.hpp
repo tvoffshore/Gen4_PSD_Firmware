@@ -52,6 +52,15 @@ public:
     static SdFs &sdFs();
 
     /**
+     * @brief List SD file system directory content
+     *
+     * @param directory Directory name
+     * @param flags Flags for list command (LS_DATE, LS_SIZE, LS_R)
+     * @return String with directory content
+     */
+    static const char *ls(const char *directory, uint8_t flags);
+
+    /**
      * @brief Create new SD file
      *
      * @param directory Directory name

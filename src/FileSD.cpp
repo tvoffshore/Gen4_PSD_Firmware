@@ -18,6 +18,33 @@
 
 #include "SystemTime.hpp"
 
+/**
+ * @brief Print-compatible string buffer
+ *
+ */
+class StringBuffer : public Print
+{
+public:
+    size_t write(uint8_t c) override
+    {
+        string += (char)c;
+        return 1;
+    }
+
+    const char *getString() const
+    {
+        return string.c_str();
+    }
+
+    void clear()
+    {
+        string.clear();
+    }
+
+private:
+    String string;
+};
+
 namespace
 {
     // SD chip select pin
@@ -33,6 +60,9 @@ namespace
 
     // SD file system class
     SdFs sd;
+
+    // String buffer to list command
+    StringBuffer listBuffer;
 } // namespace
 
 /**
@@ -98,6 +128,24 @@ bool FileSD::isCardAttached()
 SdFs &FileSD::sdFs()
 {
     return sd;
+}
+
+/**
+ * @brief List SD file system directory content
+ *
+ * @param directory Directory name
+ * @param flags Flags for list command (LS_DATE, LS_SIZE, LS_R)
+ * @return String with directory content
+ */
+const char *FileSD::ls(const char *directory, uint8_t flags)
+{
+    assert(directory);
+
+    listBuffer.clear();
+    sd.ls(&listBuffer, directory, flags);
+
+    const char *string = listBuffer.getString();
+    return string;
 }
 
 /**
