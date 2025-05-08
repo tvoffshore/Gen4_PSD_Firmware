@@ -9,20 +9,20 @@ using namespace Serials;
 
 namespace
 {
-constexpr size_t addressLength = 3;    // Length of slave address field
-constexpr size_t commandMaxLength = 4; // Maximum length of command identifier field
-constexpr size_t printMaxLength = 100; // Maximum length of command identifier field
+    constexpr size_t addressLength = 3;    // Length of slave address field
+    constexpr size_t commandMaxLength = 4; // Maximum length of command identifier field
+    constexpr size_t printMaxLength = 100; // Maximum length of print string
 
-constexpr char startMsgChar = '!';    // Character is used to signal the start of a new message
-constexpr char separatorChar = ':';   // Separator for extra check on message validity
-constexpr char accessReadChar = '?';  // Read data from slave access code
-constexpr char accessWriteChar = '='; // Write data to slave access code
-constexpr char endOfMsgChar = '\r';   // Indicate the end of the message
+    constexpr char startMsgChar = '!';    // Character is used to signal the start of a new message
+    constexpr char separatorChar = ':';   // Separator for extra check on message validity
+    constexpr char accessReadChar = '?';  // Read data from slave access code
+    constexpr char accessWriteChar = '='; // Write data to slave access code
+    constexpr char endOfMsgChar = '\r';   // Indicate the end of the message
 
-constexpr const char *ackString = "\r";   // Acknowledge string (to accept host command)
-constexpr const char *nackString = "?\r"; // Not acknowledge string (to reject host command)
+    constexpr const char *ackString = "\r";   // Acknowledge string (to accept host command)
+    constexpr const char *nackString = "?\r"; // Not acknowledge string (to reject host command)
 
-constexpr unsigned long comingMaxTimeMs = 500; // Maximum time to wait for the rest of the message coming
+    constexpr unsigned long comingMaxTimeMs = 500; // Maximum time to wait for the rest of the message coming
 
 }; // namespace
 
@@ -103,7 +103,7 @@ void SerialDevice::stop()
 }
 
 /**
- * @brief Print data to serial device
+ * @brief Print formatted string to serial interface
  *
  * @param format Format string
  * @param ... Arguments
@@ -123,8 +123,21 @@ bool SerialDevice::print(const char *format, ...)
     strcat(printString, "\n");
     size_t printLength = strlen(printString);
 
-    size_t writeSize = _serialInterface.write(printString, printLength);
-    return (writeSize == printLength);
+    size_t writtenSize = _serialInterface.write(printString, printLength);
+    return (writtenSize == printLength);
+}
+
+/**
+ * @brief Write binary data to serial interface
+ *
+ * @param data Data buffer
+ * @param size Size of buffer, bytes
+ * @return true if writing succeed, false otherwise
+ */
+bool SerialDevice::write(const char *data, size_t size)
+{
+    size_t writtenSize = _serialInterface.write(data, size);
+    return (writtenSize == size);
 }
 
 /**

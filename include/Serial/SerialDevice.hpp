@@ -90,13 +90,22 @@ public:
     void stop();
 
     /**
-     * @brief Print data to serial device
+     * @brief Print formatted string to serial interface
      *
      * @param format Format string
      * @param ... Arguments
      * @return true if printing succeed, false otherwise
      */
     bool print(const char *format, ...);
+
+    /**
+     * @brief Write binary data to serial interface
+     *
+     * @param data Data buffer
+     * @param size Size of buffer, bytes
+     * @return true if writing succeed, false otherwise
+     */
+    bool write(const char *data, size_t size);
 
     /**
      * @brief Serial device input data process
