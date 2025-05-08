@@ -81,9 +81,16 @@ namespace Log
     /**
      * @brief Print log message according formatted string without any extra characters
      *
-     * @param[in] format Formatted string
+     * @param[in] format Formatted string to print
      */
-    void write(const char *format, ...);
+    void print(const char *format, ...);
+
+    /**
+     * @brief Write string to the serial interface directly
+     *
+     * @param[in] string String to write
+     */
+    void write(const char *string);
 
     /**
      * @brief Set the new maximum printed log level

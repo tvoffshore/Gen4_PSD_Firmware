@@ -134,9 +134,9 @@ void Log::println(uint8_t logLevel, const char *source, const char *format, ...)
 /**
  * @brief Print log message according formatted string without any extra characters
  *
- * @param[in] format Formatted string
+ * @param[in] format Formatted string to print
  */
-void Log::write(const char *format, ...)
+void Log::print(const char *format, ...)
 {
     assert(format);
 
@@ -146,6 +146,18 @@ void Log::write(const char *format, ...)
     va_start(arp, format);
     vsnprintf(string, sizeof(string), format, arp);
     va_end(arp);
+
+    Serial.print(string);
+}
+
+/**
+ * @brief Write string to the serial interface directly
+ *
+ * @param[in] string String to write
+ */
+void Log::write(const char *string)
+{
+    assert(string);
 
     Serial.print(string);
 }
@@ -198,11 +210,21 @@ void Log::println(uint8_t logLevel, const char *source, const char *format, ...)
 /**
  * @brief Print log message according formatted string without any extra characters
  *
- * @param[in] format Formatted string
+ * @param[in] format Formatted string to print
  */
-void Log::write(const char *format, ...)
+void Log::print(const char *format, ...)
 {
     (void)format;
+}
+
+/**
+ * @brief Write string to the serial interface directly
+ *
+ * @param[in] string String to write
+ */
+void Log::write(const char *string)
+{
+    (void)string;
 }
 
 /**
