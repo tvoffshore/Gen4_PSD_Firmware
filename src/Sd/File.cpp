@@ -1,7 +1,7 @@
 /**
- * @file FileSD.cpp
+ * @file File.cpp
  * @author Mikhail Kalina (apollo.mk58@gmail.com)
- * @brief SD File system implementation
+ * @brief File system implementation
  * @version 0.1
  * @date 2024-06-23
  *
@@ -9,7 +9,7 @@
  *
  */
 
-#include "FileSD.hpp"
+#include "Sd/File.hpp"
 
 #include <assert.h>
 #include <string.h>
@@ -71,14 +71,14 @@ namespace
  * @param[in] frequency Maximum SCK frequency
  * @return true if SD file system was started successfully, false otherwise
  */
-bool FileSD::startFileSystem(uint32_t frequency)
+bool SD::FS::start(uint32_t frequency)
 {
     LOG_DEBUG("Start SD file system...");
 
     bool result = sd.begin(pinCS, frequency);
     if (result == true)
     {
-        result = isCardAttached();
+        result = isAttached();
         if (result == true)
         {
             uint8_t cardType = sd.card()->type();
@@ -101,7 +101,7 @@ bool FileSD::startFileSystem(uint32_t frequency)
 /**
  * @brief Start SD file system class
  */
-void FileSD::stopFileSystem()
+void SD::FS::stop()
 {
     LOG_INFO("Stop SD file system");
 
@@ -113,7 +113,7 @@ void FileSD::stopFileSystem()
  *
  * @return true if SD card is attached, false otherwise
  */
-bool FileSD::isCardAttached()
+bool SD::FS::isAttached()
 {
     uint8_t cardType = sd.card()->type();
 
@@ -125,7 +125,7 @@ bool FileSD::isCardAttached()
  *
  * @return SD file system
  */
-SdFs &FileSD::sdFs()
+SdFs &SD::FS::sdFs()
 {
     return sd;
 }
@@ -137,7 +137,7 @@ SdFs &FileSD::sdFs()
  * @param flags Flags for list command (LS_DATE, LS_SIZE, LS_R)
  * @return String with directory content
  */
-const char *FileSD::ls(const char *directory, uint8_t flags)
+const char *SD::FS::list(const char *directory, uint8_t flags)
 {
     assert(directory);
 
@@ -156,7 +156,7 @@ const char *FileSD::ls(const char *directory, uint8_t flags)
  * @param extension File extension
  * @return True if file has been created successfully, false otherwise
  */
-bool FileSD::create(const char *directory, const char *fileName, const char *extension)
+bool SD::File::create(const char *directory, const char *fileName, const char *extension)
 {
     assert(directory);
     assert(fileName);
@@ -212,7 +212,7 @@ bool FileSD::create(const char *directory, const char *fileName, const char *ext
  *
  * @return True if the file successfully opened, false otherwise
  */
-bool FileSD::open()
+bool SD::File::open()
 {
     if (_file == false)
     {
@@ -240,7 +240,7 @@ bool FileSD::open()
 /**
  * @brief Close the file
  */
-bool FileSD::close()
+bool SD::File::close()
 {
     if (_file)
     {
@@ -258,7 +258,7 @@ bool FileSD::close()
  * @param string Data string to print
  * @return True if data has been added to the file, false otherwise
  */
-bool FileSD::print(const char *string)
+bool SD::File::print(const char *string)
 {
     assert(string);
 
@@ -289,7 +289,7 @@ bool FileSD::print(const char *string)
  * @param string Data string to print
  * @return True if data has been added to file, false otherwise
  */
-bool FileSD::println(const char *string)
+bool SD::File::println(const char *string)
 {
     assert(string);
 
@@ -321,7 +321,7 @@ bool FileSD::println(const char *string)
  * @param size Number of bytes to write
  * @return True if buffer has been written to the file, false otherwise
  */
-bool FileSD::write(const void *buffer, size_t size)
+bool SD::File::write(const void *buffer, size_t size)
 {
     assert(buffer);
     assert(size > 0);
@@ -353,7 +353,7 @@ bool FileSD::write(const void *buffer, size_t size)
  * @param flags Type of operation to be timestamped (T_ACCESS, T_CREATE, T_WRITE)
  * @return true if timestamp was added, false otherwise
  */
-bool FileSD::timestamp(uint8_t flags)
+bool SD::File::timestamp(uint8_t flags)
 {
     bool result = false;
 
@@ -374,7 +374,7 @@ bool FileSD::timestamp(uint8_t flags)
  *
  * @return File size, bytes
  */
-size_t FileSD::size()
+size_t SD::File::size()
 {
     size_t fileSize = 0;
 

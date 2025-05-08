@@ -33,11 +33,11 @@
 #include "Analog/VddController.hpp"
 #include "Battery.hpp"
 #include "Board.h"
-#include "FileSD.hpp"
 #include "FwVersion.hpp"
 #include "IoExpander/IoExpander.hpp"
 #include "Measurements/Psd.h"
 #include "Measurements/Statistic.h"
+#include "Sd/File.hpp"
 #include "Serial/SerialManager.hpp"
 
 using namespace Measurements;
@@ -707,318 +707,318 @@ namespace
         Battery::Status batteryStatus = Battery::readStatus();
         char directoryName[30];
         char fileName[30];
-        FileSD _file;
+        SD::File sdFile;
 
         // CSV
         snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryCsv, dateTimeString);
-        bool isOpen = _file.create(directoryName, dateTimeString, fileExtensionCsv);
+        bool isOpen = sdFile.create(directoryName, dateTimeString, fileExtensionCsv);
         if (isOpen == true)
         {
             char string[100];
 
             snprintf(string, sizeof(string), "FW %s", FwVersion::getVersionString());
-            _file.println(string);
+            sdFile.println(string);
 
             // File header
             float batteryVoltage = static_cast<float>(batteryStatus.voltage) / 1000;
             snprintf(string, sizeof(string), "BATT %.1fV", batteryVoltage);
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "BATT %u%%", batteryStatus.level);
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "START_TIME %u/%u/%u %u:%u:%u",
                      context.startDateTime.Day, context.startDateTime.Month, context.startDateTime.Year,
                      context.startDateTime.Hour, context.startDateTime.Minute, context.startDateTime.Second);
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Logging Rate,%u", settings.frequency);
-            _file.println(string);
-            _file.println(""); // End of header
+            sdFile.println(string);
+            sdFile.println(""); // End of header
 
-            _file.println("Channel Name,ADC_1");
-            _file.println("Channel Units,raw_12bit");
+            sdFile.println("Channel Name,ADC_1");
+            sdFile.println("Channel Units,raw_12bit");
             snprintf(string, sizeof(string), "Maximum,%G", statisticAdc1.max());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Minimum,%G", statisticAdc1.min());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Mean,%G", statisticAdc1.mean());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAdc1.deviation());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinAdc1.frequency, coreBinAdc1.amplitude);
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
-            _file.print(string);
+            sdFile.print(string);
             for (size_t idx = 0; idx < resultPoints; idx++)
             {
                 snprintf(string, sizeof(string), ",%G", resultPsdAdc1[idx]);
-                _file.print(string);
+                sdFile.print(string);
             }
-            _file.println(""); // End of PSD
-            _file.println(""); // End of channel
+            sdFile.println(""); // End of PSD
+            sdFile.println(""); // End of channel
 
-            _file.println("Channel Name,ADC_2");
-            _file.println("Channel Units,raw_12bit");
+            sdFile.println("Channel Name,ADC_2");
+            sdFile.println("Channel Units,raw_12bit");
             snprintf(string, sizeof(string), "Maximum,%G", statisticAdc2.max());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Minimum,%G", statisticAdc2.min());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Mean,%G", statisticAdc2.mean());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAdc2.deviation());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinAdc2.frequency, coreBinAdc2.amplitude);
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
-            _file.print(string);
+            sdFile.print(string);
             for (size_t idx = 0; idx < resultPoints; idx++)
             {
                 snprintf(string, sizeof(string), ",%G", resultPsdAdc2[idx]);
-                _file.print(string);
+                sdFile.print(string);
             }
-            _file.println(""); // End of PSD
-            _file.println(""); // End of channel
+            sdFile.println(""); // End of PSD
+            sdFile.println(""); // End of channel
 
-            _file.println("Channel Name,ACC_X");
-            _file.println("Channel Units,m/s^2");
+            sdFile.println("Channel Name,ACC_X");
+            sdFile.println("Channel Units,m/s^2");
             snprintf(string, sizeof(string), "Maximum,%G", rawAccelToMs2(statisticAccX.max()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Minimum,%G", rawAccelToMs2(statisticAccX.min()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Mean,%G", rawAccelToMs2(statisticAccX.mean()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Standard Deviation,%G", rawAccelToMs2(statisticAccX.deviation()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinAccX.frequency, coreBinAccX.amplitude);
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
-            _file.print(string);
+            sdFile.print(string);
             for (size_t idx = 0; idx < resultPoints; idx++)
             {
                 snprintf(string, sizeof(string), ",%G", resultPsdAccX[idx]);
-                _file.print(string);
+                sdFile.print(string);
             }
-            _file.println(""); // End of PSD
-            _file.println(""); // End of channel
+            sdFile.println(""); // End of PSD
+            sdFile.println(""); // End of channel
 
-            _file.println("Channel Name,ACC_Y");
-            _file.println("Channel Units,m/s^2");
+            sdFile.println("Channel Name,ACC_Y");
+            sdFile.println("Channel Units,m/s^2");
             snprintf(string, sizeof(string), "Maximum,%G", rawAccelToMs2(statisticAccY.max()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Minimum,%G", rawAccelToMs2(statisticAccY.min()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Mean,%G", rawAccelToMs2(statisticAccY.mean()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Standard Deviation,%G", rawAccelToMs2(statisticAccY.deviation()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinAccY.frequency, coreBinAccY.amplitude);
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
-            _file.print(string);
+            sdFile.print(string);
             for (size_t idx = 0; idx < resultPoints; idx++)
             {
                 snprintf(string, sizeof(string), ",%G", resultPsdAccY[idx]);
-                _file.print(string);
+                sdFile.print(string);
             }
-            _file.println(""); // End of PSD
-            _file.println(""); // End of channel
+            sdFile.println(""); // End of PSD
+            sdFile.println(""); // End of channel
 
-            _file.println("Channel Name,ACC_Z");
-            _file.println("Channel Units,m/s^2");
+            sdFile.println("Channel Name,ACC_Z");
+            sdFile.println("Channel Units,m/s^2");
             snprintf(string, sizeof(string), "Maximum,%G", rawAccelToMs2(statisticAccZ.max()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Minimum,%G", rawAccelToMs2(statisticAccZ.min()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Mean,%G", rawAccelToMs2(statisticAccZ.mean()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Standard Deviation,%G", rawAccelToMs2(statisticAccZ.deviation()));
-            _file.println(string);
-            _file.println(""); // End of channel
+            sdFile.println(string);
+            sdFile.println(""); // End of channel
 
-            _file.println("Channel Name,GYRO_X");
-            _file.println("Channel Units,rad/s");
+            sdFile.println("Channel Name,GYRO_X");
+            sdFile.println("Channel Units,rad/s");
             snprintf(string, sizeof(string), "Maximum,%G", rawGyroToRads(statisticGyroX.max()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Minimum,%G", rawGyroToRads(statisticGyroX.min()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Mean,%G", rawGyroToRads(statisticGyroX.mean()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Standard Deviation,%G", rawGyroToRads(statisticGyroX.deviation()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinGyroX.frequency, coreBinGyroX.amplitude);
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
-            _file.print(string);
+            sdFile.print(string);
             for (size_t idx = 0; idx < resultPoints; idx++)
             {
                 snprintf(string, sizeof(string), ",%G", resultPsdGyroX[idx]);
-                _file.print(string);
+                sdFile.print(string);
             }
-            _file.println(""); // End of PSD
-            _file.println(""); // End of channel
+            sdFile.println(""); // End of PSD
+            sdFile.println(""); // End of channel
 
-            _file.println("Channel Name,GYRO_Y");
-            _file.println("Channel Units,rad/s");
+            sdFile.println("Channel Name,GYRO_Y");
+            sdFile.println("Channel Units,rad/s");
             snprintf(string, sizeof(string), "Maximum,%G", rawGyroToRads(statisticGyroY.max()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Minimum,%G", rawGyroToRads(statisticGyroY.min()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Mean,%G", rawGyroToRads(statisticGyroY.mean()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Standard Deviation,%G", rawGyroToRads(statisticGyroY.deviation()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinGyroY.frequency, coreBinGyroY.amplitude);
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
-            _file.print(string);
+            sdFile.print(string);
             for (size_t idx = 0; idx < resultPoints; idx++)
             {
                 snprintf(string, sizeof(string), ",%G", resultPsdGyroY[idx]);
-                _file.print(string);
+                sdFile.print(string);
             }
-            _file.println(""); // End of PSD
-            _file.println(""); // End of channel
+            sdFile.println(""); // End of PSD
+            sdFile.println(""); // End of channel
 
-            _file.println("Channel Name,GYRO_Z");
-            _file.println("Channel Units,rad/s");
+            sdFile.println("Channel Name,GYRO_Z");
+            sdFile.println("Channel Units,rad/s");
             snprintf(string, sizeof(string), "Maximum,%G", rawGyroToRads(statisticGyroZ.max()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Minimum,%G", rawGyroToRads(statisticGyroZ.min()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Mean,%G", rawGyroToRads(statisticGyroZ.mean()));
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Standard Deviation,%G", rawGyroToRads(statisticGyroZ.deviation()));
-            _file.println(string);
-            _file.println(""); // End of channel
+            sdFile.println(string);
+            sdFile.println(""); // End of channel
 
-            _file.println("Channel Name,ROLL");
-            _file.println("Channel Units,deg");
+            sdFile.println("Channel Name,ROLL");
+            sdFile.println("Channel Units,deg");
             snprintf(string, sizeof(string), "Maximum,%G", statisticRoll.max());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Minimum,%G", statisticRoll.min());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Mean,%G", statisticRoll.mean());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Standard Deviation,%G", statisticRoll.deviation());
-            _file.println(string);
-            _file.println(""); // End of channel
+            sdFile.println(string);
+            sdFile.println(""); // End of channel
 
-            _file.println("Channel Name,PITCH");
-            _file.println("Channel Units,deg");
+            sdFile.println("Channel Name,PITCH");
+            sdFile.println("Channel Units,deg");
             snprintf(string, sizeof(string), "Maximum,%G", statisticPitch.max());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Minimum,%G", statisticPitch.min());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Mean,%G", statisticPitch.mean());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Standard Deviation,%G", statisticPitch.deviation());
-            _file.println(string);
-            _file.println(""); // End of channel
+            sdFile.println(string);
+            sdFile.println(""); // End of channel
 
-            _file.println("Channel Name,E_ACC_RES");
-            _file.println("Channel Units,m/s^2");
+            sdFile.println("Channel Name,E_ACC_RES");
+            sdFile.println("Channel Units,m/s^2");
             snprintf(string, sizeof(string), "Maximum,%G", statisticAccelResult.max());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Minimum,%G", statisticAccelResult.min());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Mean,%G", statisticAccelResult.mean());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAccelResult.deviation());
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinAccResult.frequency, coreBinAccResult.amplitude);
-            _file.println(string);
+            sdFile.println(string);
             snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
-            _file.print(string);
+            sdFile.print(string);
             for (size_t idx = 0; idx < resultPoints; idx++)
             {
                 snprintf(string, sizeof(string), ",%G", resultPsdAccResult[idx]);
-                _file.print(string);
+                sdFile.print(string);
             }
-            _file.println(""); // End of PSD
-            _file.println(""); // End of channel
+            sdFile.println(""); // End of PSD
+            sdFile.println(""); // End of channel
 
-            _file.close();
+            sdFile.close();
         }
 
         // BIN/PSD/ADC1
         snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryBinPsdAdc1, dateTimeString);
         snprintf(fileName, sizeof(fileName), "%u", epochTime);
-        isOpen = _file.create(directoryName, fileName, fileExtensionBin);
+        isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
         if (isOpen == true)
         {
-            _file.write(&context.startEpochTime, sizeof(context.startEpochTime));
+            sdFile.write(&context.startEpochTime, sizeof(context.startEpochTime));
 
-            _file.write(&coreBinAdc1.frequency, sizeof(coreBinAdc1.frequency));
-            _file.write(&coreBinAdc1.amplitude, sizeof(coreBinAdc1.amplitude));
-            _file.write(resultPsdAdc1, resultPoints * sizeof(*resultPsdAdc1));
+            sdFile.write(&coreBinAdc1.frequency, sizeof(coreBinAdc1.frequency));
+            sdFile.write(&coreBinAdc1.amplitude, sizeof(coreBinAdc1.amplitude));
+            sdFile.write(resultPsdAdc1, resultPoints * sizeof(*resultPsdAdc1));
 
-            _file.close();
+            sdFile.close();
         }
 
         // BIN/PSD/ADC2
         snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryBinPsdAdc2, dateTimeString);
         snprintf(fileName, sizeof(fileName), "%u", epochTime);
-        isOpen = _file.create(directoryName, fileName, fileExtensionBin);
+        isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
         if (isOpen == true)
         {
-            _file.write(&context.startEpochTime, sizeof(context.startEpochTime));
+            sdFile.write(&context.startEpochTime, sizeof(context.startEpochTime));
 
-            _file.write(&coreBinAdc2.frequency, sizeof(coreBinAdc2.frequency));
-            _file.write(&coreBinAdc2.amplitude, sizeof(coreBinAdc2.amplitude));
-            _file.write(resultPsdAdc2, resultPoints * sizeof(*resultPsdAdc2));
+            sdFile.write(&coreBinAdc2.frequency, sizeof(coreBinAdc2.frequency));
+            sdFile.write(&coreBinAdc2.amplitude, sizeof(coreBinAdc2.amplitude));
+            sdFile.write(resultPsdAdc2, resultPoints * sizeof(*resultPsdAdc2));
 
-            _file.close();
+            sdFile.close();
         }
 
         // BIN/PSD/ACC
         snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryBinPsdAccel, dateTimeString);
         snprintf(fileName, sizeof(fileName), "%u", epochTime);
-        isOpen = _file.create(directoryName, fileName, fileExtensionBin);
+        isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
         if (isOpen == true)
         {
-            _file.write(&context.startEpochTime, sizeof(context.startEpochTime));
+            sdFile.write(&context.startEpochTime, sizeof(context.startEpochTime));
 
-            _file.write(&coreBinAccX.frequency, sizeof(coreBinAccX.frequency));
-            _file.write(&coreBinAccX.amplitude, sizeof(coreBinAccX.amplitude));
-            _file.write(resultPsdAccX, resultPoints * sizeof(*resultPsdAccX));
+            sdFile.write(&coreBinAccX.frequency, sizeof(coreBinAccX.frequency));
+            sdFile.write(&coreBinAccX.amplitude, sizeof(coreBinAccX.amplitude));
+            sdFile.write(resultPsdAccX, resultPoints * sizeof(*resultPsdAccX));
 
-            _file.write(&coreBinAccY.frequency, sizeof(coreBinAccY.frequency));
-            _file.write(&coreBinAccY.amplitude, sizeof(coreBinAccY.amplitude));
-            _file.write(resultPsdAccY, resultPoints * sizeof(*resultPsdAccY));
+            sdFile.write(&coreBinAccY.frequency, sizeof(coreBinAccY.frequency));
+            sdFile.write(&coreBinAccY.amplitude, sizeof(coreBinAccY.amplitude));
+            sdFile.write(resultPsdAccY, resultPoints * sizeof(*resultPsdAccY));
 
-            _file.close();
+            sdFile.close();
         }
 
         // BIN/PSD/GYR
         snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryBinPsdGyro, dateTimeString);
         snprintf(fileName, sizeof(fileName), "%u", epochTime);
-        isOpen = _file.create(directoryName, fileName, fileExtensionBin);
+        isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
         if (isOpen == true)
         {
-            _file.write(&context.startEpochTime, sizeof(context.startEpochTime));
+            sdFile.write(&context.startEpochTime, sizeof(context.startEpochTime));
 
-            _file.write(&coreBinGyroX.frequency, sizeof(coreBinGyroX.frequency));
-            _file.write(&coreBinGyroX.amplitude, sizeof(coreBinGyroX.amplitude));
-            _file.write(resultPsdGyroX, resultPoints * sizeof(*resultPsdGyroX));
+            sdFile.write(&coreBinGyroX.frequency, sizeof(coreBinGyroX.frequency));
+            sdFile.write(&coreBinGyroX.amplitude, sizeof(coreBinGyroX.amplitude));
+            sdFile.write(resultPsdGyroX, resultPoints * sizeof(*resultPsdGyroX));
 
-            _file.write(&coreBinGyroY.frequency, sizeof(coreBinGyroY.frequency));
-            _file.write(&coreBinGyroY.amplitude, sizeof(coreBinGyroY.amplitude));
-            _file.write(resultPsdGyroY, resultPoints * sizeof(*resultPsdGyroY));
+            sdFile.write(&coreBinGyroY.frequency, sizeof(coreBinGyroY.frequency));
+            sdFile.write(&coreBinGyroY.amplitude, sizeof(coreBinGyroY.amplitude));
+            sdFile.write(resultPsdGyroY, resultPoints * sizeof(*resultPsdGyroY));
 
-            _file.close();
+            sdFile.close();
         }
 
         // BIN/PSD/ACC_RES
         snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryBinPsdAccelResult, dateTimeString);
         snprintf(fileName, sizeof(fileName), "%u", epochTime);
-        isOpen = _file.create(directoryName, fileName, fileExtensionBin);
+        isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
         if (isOpen == true)
         {
-            _file.write(&context.startEpochTime, sizeof(context.startEpochTime));
+            sdFile.write(&context.startEpochTime, sizeof(context.startEpochTime));
 
-            _file.write(&coreBinAccResult.frequency, sizeof(coreBinAccResult.frequency));
-            _file.write(&coreBinAccResult.amplitude, sizeof(coreBinAccResult.amplitude));
-            _file.write(resultPsdAccResult, resultPoints * sizeof(*resultPsdAccResult));
+            sdFile.write(&coreBinAccResult.frequency, sizeof(coreBinAccResult.frequency));
+            sdFile.write(&coreBinAccResult.amplitude, sizeof(coreBinAccResult.amplitude));
+            sdFile.write(resultPsdAccResult, resultPoints * sizeof(*resultPsdAccResult));
 
-            _file.close();
+            sdFile.close();
         }
 
         LOG_DEBUG("ADC_1: Max %d, Min %d, Mean %f, Standard Deviation %f, Core Frequency %lfHz - %lf",
@@ -1550,7 +1550,7 @@ void Manager::process()
                 // Stop sensors sampling
                 stopSampling();
 
-                FileSD::stopFileSystem();
+                SD::FS::stop();
 
                 Board::deepSleep(settings.pauseInterval);
             }

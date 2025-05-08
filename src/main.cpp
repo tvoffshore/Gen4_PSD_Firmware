@@ -17,10 +17,10 @@
 // Source headers
 #include "Battery.hpp"
 #include "Board.h"
-#include "FileLoader.hpp"
-#include "FileSD.hpp"
 #include "FwVersion.hpp"
 #include "Measurements/MeasureManager.h"
+#include "Sd/File.hpp"
+#include "Sd/FileLoader.hpp"
 #include "Serial/SerialManager.hpp"
 
 /**
@@ -138,7 +138,7 @@ void setup()
     }
 
     // Start SD file system
-    status = FileSD::startFileSystem(Board::SpiConfig::frequency);
+    status = SD::FS::start(Board::SpiConfig::frequency);
     if (status == false)
     {
         LOG_ERROR("SD initialization failed");

@@ -9,12 +9,12 @@
  *
  */
 
-#include "FileLoader.hpp"
+#include "Sd/FileLoader.hpp"
 
 #include <Log.hpp>
 #include <SystemTime.hpp>
 
-#include "FileSD.hpp"
+#include "Sd/File.hpp"
 #include "Serial/SerialManager.hpp"
 
 using namespace FileLoader;
