@@ -37,6 +37,7 @@
 #include "IoExpander/IoExpander.hpp"
 #include "Measurements/Psd.h"
 #include "Measurements/Statistic.h"
+#include "Measurements/Types.hpp"
 #include "Sd/File.hpp"
 #include "Serial/SerialManager.hpp"
 
@@ -107,17 +108,7 @@ namespace
     const char *directoryCsv = "CSV";
     const char *fileExtensionCsv = "csv";
     // BIN files
-    const char *directoryBinPsdAdc1 = "BIN/PSD/ADC1";
-    const char *directoryBinPsdAdc2 = "BIN/PSD/ADC2";
-    const char *directoryBinPsdAccel = "BIN/PSD/ACC";
-    const char *directoryBinPsdGyro = "BIN/PSD/GYR";
-    const char *directoryBinPsdAccelResult = "BIN/PSD/ACC_RES";
-    const char *directoryBinStatAdc1 = "BIN/STAT/ADC1";
-    const char *directoryBinStatAdc2 = "BIN/STAT/ADC2";
-    const char *directoryBinStatAccel = "BIN/STAT/ACC";
-    const char *directoryBinStatGyro = "BIN/STAT/GYR";
-    const char *directoryBinStatAccelResult = "BIN/STAT/ACC_RES";
-    const char *directoryBinStatAngle = "BIN/STAT/ANG";
+    const char *directoryBin = "BIN";
     const char *fileExtensionBin = "bin";
 
     namespace EventBits
@@ -939,7 +930,8 @@ namespace
         }
 
         // BIN/PSD/ADC1
-        snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryBinPsdAdc1, dateTimeString);
+        snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
+                 getDirectory(SensorType::Adc1, DataType::Psd), dateTimeString);
         snprintf(fileName, sizeof(fileName), "%u", epochTime);
         isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
         if (isOpen == true)
@@ -954,7 +946,8 @@ namespace
         }
 
         // BIN/PSD/ADC2
-        snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryBinPsdAdc2, dateTimeString);
+        snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
+                 getDirectory(SensorType::Adc2, DataType::Psd), dateTimeString);
         snprintf(fileName, sizeof(fileName), "%u", epochTime);
         isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
         if (isOpen == true)
@@ -969,7 +962,8 @@ namespace
         }
 
         // BIN/PSD/ACC
-        snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryBinPsdAccel, dateTimeString);
+        snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
+                 getDirectory(SensorType::Accel, DataType::Psd), dateTimeString);
         snprintf(fileName, sizeof(fileName), "%u", epochTime);
         isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
         if (isOpen == true)
@@ -988,7 +982,8 @@ namespace
         }
 
         // BIN/PSD/GYR
-        snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryBinPsdGyro, dateTimeString);
+        snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
+                 getDirectory(SensorType::Gyro, DataType::Psd), dateTimeString);
         snprintf(fileName, sizeof(fileName), "%u", epochTime);
         isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
         if (isOpen == true)
@@ -1007,7 +1002,8 @@ namespace
         }
 
         // BIN/PSD/ACC_RES
-        snprintf(directoryName, sizeof(directoryName), "%s/%.8s", directoryBinPsdAccelResult, dateTimeString);
+        snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
+                 getDirectory(SensorType::AccelResult, DataType::Psd), dateTimeString);
         snprintf(fileName, sizeof(fileName), "%u", epochTime);
         isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
         if (isOpen == true)
