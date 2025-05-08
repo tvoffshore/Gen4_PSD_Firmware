@@ -17,6 +17,7 @@
 // Source headers
 #include "Battery.hpp"
 #include "Board.h"
+#include "FileLoader.hpp"
 #include "FileSD.hpp"
 #include "FwVersion.hpp"
 #include "Measurements/MeasureManager.h"
@@ -148,6 +149,8 @@ void setup()
     {
         LOG_ERROR("Measurements initialization failed");
     }
+
+    FileLoader::initialize();
 
     LOG_INFO("Setup done");
 }

@@ -43,6 +43,11 @@ namespace Serials
         LogLevel,         // 10: Set/Get serial debug log level
         FwVersion,        // 11: Get FW version information
         BatteryStatus,    // 12: Get battery status
+        DownloadRecent,   // 13: Set download range starting from now
+        DownloadHistory,  // 14: Set download range starting from timestamp
+        DownloadType,     // 15: Set download data type
+        DownloadSize,     // 16: Get download data size in bytes
+        DownloadChunk,    // 17: Get next data chunk
 
         Commands // Total number of serial commands
     };
@@ -122,6 +127,31 @@ namespace Serials
         {
             .id = CommandId::BatteryStatus,
             .string = "BATT",
+            .accessMask = AccessMask::read,
+        },
+        {
+            .id = CommandId::DownloadRecent,
+            .string = "DWNR",
+            .accessMask = AccessMask::write,
+        },
+        {
+            .id = CommandId::DownloadHistory,
+            .string = "DWNH",
+            .accessMask = AccessMask::write,
+        },
+        {
+            .id = CommandId::DownloadType,
+            .string = "DWNT",
+            .accessMask = AccessMask::write,
+        },
+        {
+            .id = CommandId::DownloadSize,
+            .string = "DWNS",
+            .accessMask = AccessMask::read,
+        },
+        {
+            .id = CommandId::DownloadChunk,
+            .string = "DWNC",
             .accessMask = AccessMask::read,
         },
     };
