@@ -945,6 +945,26 @@ namespace
             sdFile.close();
         }
 
+        // BIN/STAT/ADC1
+        snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
+                 getDirectory(SensorType::Adc1, DataType::Statistic), dateTimeString);
+        snprintf(fileName, sizeof(fileName), "%u", epochTime);
+        isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
+        if (isOpen == true)
+        {
+            uint16_t max = statisticAdc1.max();
+            uint16_t min = statisticAdc1.min();
+            uint16_t mean = statisticAdc1.mean();
+            uint16_t deviation = statisticAdc1.deviation();
+
+            sdFile.write(&max, sizeof(max));
+            sdFile.write(&min, sizeof(min));
+            sdFile.write(&mean, sizeof(mean));
+            sdFile.write(&deviation, sizeof(deviation));
+
+            sdFile.close();
+        }
+
         // BIN/PSD/ADC2
         snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
                  getDirectory(SensorType::Adc2, DataType::Psd), dateTimeString);
@@ -957,6 +977,26 @@ namespace
             sdFile.write(&coreBinAdc2.frequency, sizeof(coreBinAdc2.frequency));
             sdFile.write(&coreBinAdc2.amplitude, sizeof(coreBinAdc2.amplitude));
             sdFile.write(resultPsdAdc2, resultPoints * sizeof(*resultPsdAdc2));
+
+            sdFile.close();
+        }
+
+        // BIN/STAT/ADC2
+        snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
+                 getDirectory(SensorType::Adc2, DataType::Statistic), dateTimeString);
+        snprintf(fileName, sizeof(fileName), "%u", epochTime);
+        isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
+        if (isOpen == true)
+        {
+            uint16_t max = statisticAdc2.max();
+            uint16_t min = statisticAdc2.min();
+            uint16_t mean = statisticAdc2.mean();
+            uint16_t deviation = statisticAdc2.deviation();
+
+            sdFile.write(&max, sizeof(max));
+            sdFile.write(&min, sizeof(min));
+            sdFile.write(&mean, sizeof(mean));
+            sdFile.write(&deviation, sizeof(deviation));
 
             sdFile.close();
         }
@@ -981,6 +1021,46 @@ namespace
             sdFile.close();
         }
 
+        // BIN/STAT/ACC
+        snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
+                 getDirectory(SensorType::Accel, DataType::Statistic), dateTimeString);
+        snprintf(fileName, sizeof(fileName), "%u", epochTime);
+        isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
+        if (isOpen == true)
+        {
+            uint16_t max = statisticAccX.max();
+            uint16_t min = statisticAccX.min();
+            uint16_t mean = statisticAccX.mean();
+            uint16_t deviation = statisticAccX.deviation();
+
+            sdFile.write(&max, sizeof(max));
+            sdFile.write(&min, sizeof(min));
+            sdFile.write(&mean, sizeof(mean));
+            sdFile.write(&deviation, sizeof(deviation));
+
+            max = statisticAccY.max();
+            min = statisticAccY.min();
+            mean = statisticAccY.mean();
+            deviation = statisticAccY.deviation();
+
+            sdFile.write(&max, sizeof(max));
+            sdFile.write(&min, sizeof(min));
+            sdFile.write(&mean, sizeof(mean));
+            sdFile.write(&deviation, sizeof(deviation));
+
+            max = statisticAccZ.max();
+            min = statisticAccZ.min();
+            mean = statisticAccZ.mean();
+            deviation = statisticAccZ.deviation();
+
+            sdFile.write(&max, sizeof(max));
+            sdFile.write(&min, sizeof(min));
+            sdFile.write(&mean, sizeof(mean));
+            sdFile.write(&deviation, sizeof(deviation));
+
+            sdFile.close();
+        }
+
         // BIN/PSD/GYR
         snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
                  getDirectory(SensorType::Gyro, DataType::Psd), dateTimeString);
@@ -1001,6 +1081,46 @@ namespace
             sdFile.close();
         }
 
+        // BIN/STAT/GYR
+        snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
+                 getDirectory(SensorType::Gyro, DataType::Statistic), dateTimeString);
+        snprintf(fileName, sizeof(fileName), "%u", epochTime);
+        isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
+        if (isOpen == true)
+        {
+            uint16_t max = statisticGyroX.max();
+            uint16_t min = statisticGyroX.min();
+            uint16_t mean = statisticGyroX.mean();
+            uint16_t deviation = statisticGyroX.deviation();
+
+            sdFile.write(&max, sizeof(max));
+            sdFile.write(&min, sizeof(min));
+            sdFile.write(&mean, sizeof(mean));
+            sdFile.write(&deviation, sizeof(deviation));
+
+            max = statisticGyroY.max();
+            min = statisticGyroY.min();
+            mean = statisticGyroY.mean();
+            deviation = statisticGyroY.deviation();
+
+            sdFile.write(&max, sizeof(max));
+            sdFile.write(&min, sizeof(min));
+            sdFile.write(&mean, sizeof(mean));
+            sdFile.write(&deviation, sizeof(deviation));
+
+            max = statisticGyroZ.max();
+            min = statisticGyroZ.min();
+            mean = statisticGyroZ.mean();
+            deviation = statisticGyroZ.deviation();
+
+            sdFile.write(&max, sizeof(max));
+            sdFile.write(&min, sizeof(min));
+            sdFile.write(&mean, sizeof(mean));
+            sdFile.write(&deviation, sizeof(deviation));
+
+            sdFile.close();
+        }
+
         // BIN/PSD/ACC_RES
         snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
                  getDirectory(SensorType::AccelResult, DataType::Psd), dateTimeString);
@@ -1013,6 +1133,56 @@ namespace
             sdFile.write(&coreBinAccResult.frequency, sizeof(coreBinAccResult.frequency));
             sdFile.write(&coreBinAccResult.amplitude, sizeof(coreBinAccResult.amplitude));
             sdFile.write(resultPsdAccResult, resultPoints * sizeof(*resultPsdAccResult));
+
+            sdFile.close();
+        }
+
+        // BIN/STAT/ACC_RES
+        snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
+                 getDirectory(SensorType::AccelResult, DataType::Statistic), dateTimeString);
+        snprintf(fileName, sizeof(fileName), "%u", epochTime);
+        isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
+        if (isOpen == true)
+        {
+            uint16_t max = statisticAccelResult.max();
+            uint16_t min = statisticAccelResult.min();
+            uint16_t mean = statisticAccelResult.mean();
+            uint16_t deviation = statisticAccelResult.deviation();
+
+            sdFile.write(&max, sizeof(max));
+            sdFile.write(&min, sizeof(min));
+            sdFile.write(&mean, sizeof(mean));
+            sdFile.write(&deviation, sizeof(deviation));
+
+            sdFile.close();
+        }
+
+        // BIN/STAT/ANG
+        snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
+                 getDirectory(SensorType::Angle, DataType::Statistic), dateTimeString);
+        snprintf(fileName, sizeof(fileName), "%u", epochTime);
+        isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
+        if (isOpen == true)
+        {
+            uint16_t max = statisticRoll.max();
+            uint16_t min = statisticRoll.min();
+            uint16_t mean = statisticRoll.mean();
+            uint16_t deviation = statisticRoll.deviation();
+
+            sdFile.write(&max, sizeof(max));
+            sdFile.write(&min, sizeof(min));
+            sdFile.write(&mean, sizeof(mean));
+            sdFile.write(&deviation, sizeof(deviation));
+
+            max = statisticPitch.max();
+            min = statisticPitch.min();
+            mean = statisticPitch.mean();
+            deviation = statisticPitch.deviation();
+
+            sdFile.write(&max, sizeof(max));
+            sdFile.write(&min, sizeof(min));
+            sdFile.write(&mean, sizeof(mean));
+            sdFile.write(&deviation, sizeof(deviation));
 
             sdFile.close();
         }
