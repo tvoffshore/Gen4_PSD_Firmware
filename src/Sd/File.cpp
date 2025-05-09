@@ -210,16 +210,20 @@ bool SD::File::create(const char *directory, const char *fileName, const char *e
 /**
  * @brief Open existing file
  *
+ * @param path File path
+ * @param flags Flags to open
  * @return True if the file successfully opened, false otherwise
  */
-bool SD::File::open()
+bool SD::File::open(const char *path, oflag_t flags)
 {
     if (_file == false)
     {
-        if (sd.exists(_path))
+        if (sd.exists(path))
         {
-            // Try to open file with append access (add new data at the end of the file)
-            _file = sd.open(_path, O_WRONLY | O_APPEND);
+            strncpy(_path, path, sizeof(_path));
+
+            // Try to open file
+            _file = sd.open(_path, flags);
             if (_file)
             {
                 // File was successfully opened, add timestamp
@@ -230,7 +234,7 @@ bool SD::File::open()
         }
         else
         {
-            LOG_ERROR("File \"%s\" isn't exist to open", _path);
+            LOG_ERROR("File \"%s\" isn't exist to open", path);
         }
     }
 
@@ -343,6 +347,33 @@ bool SD::File::write(const void *buffer, size_t size)
     }
 
     LOG_TRACE("Buffer size %d %s written to file \"%s\"", size, result ? "is" : "isn't", _path);
+
+    return result;
+}
+
+/**
+ * @brief Read file to the buffer
+ *
+ * @param buffer Pointer to the buffer data
+ * @param size Number of bytes to read
+ * @return True if file has been read to the buffer, false otherwise
+ */
+bool SD::File::read(char *buffer, size_t size)
+{
+    assert(buffer);
+    assert(size > 0);
+
+    bool result = false;
+
+    if (_file)
+    {
+        // Read file to the buffer
+        size_t readBytes = _file.readBytes(buffer, size);
+        // Read bytes should be equal to the buffer size
+        result = (readBytes == size);
+    }
+
+    LOG_TRACE("File \"%s\" %s read to buffer size %d", _path, result ? "is" : "isn't", size);
 
     return result;
 }

@@ -47,7 +47,7 @@ namespace Serials
         DownloadHistory,  // 14: Set download range starting from timestamp
         DownloadType,     // 15: Set download data type
         DownloadSize,     // 16: Get download data size in bytes
-        DownloadChunk,    // 17: Get next data chunk
+        DownloadData,     // 17: Get next data chunk
 
         Commands // Total number of serial commands
     };
@@ -150,8 +150,8 @@ namespace Serials
             .accessMask = AccessMask::read,
         },
         {
-            .id = CommandId::DownloadChunk,
-            .string = "DWNC",
+            .id = CommandId::DownloadData,
+            .string = "DWND",
             .accessMask = AccessMask::read,
         },
     };

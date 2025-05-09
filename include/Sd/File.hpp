@@ -78,9 +78,11 @@ namespace SD
         /**
          * @brief Open existing file
          *
+         * @param path File path
+         * @param flags Flags to open
          * @return True if the file is successfully opened, false otherwise
          */
-        bool open();
+        bool open(const char *path, oflag_t flags = O_RDONLY);
 
         /**
          * @brief Close the file
@@ -113,6 +115,15 @@ namespace SD
          * @return True if buffer has been written to the file, false otherwise
          */
         bool write(const void *buffer, size_t size);
+
+        /**
+         * @brief Read file to the buffer
+         *
+         * @param buffer Pointer to the buffer data
+         * @param size Number of bytes to read
+         * @return True if file has been read to the buffer, false otherwise
+         */
+        bool read(char *buffer, size_t size);
 
         /**
          * @brief Set a file's opration timestamp in its directory entry
