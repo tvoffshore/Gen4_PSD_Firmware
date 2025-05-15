@@ -90,6 +90,6 @@ namespace Serials
         }
 
     private:
-        HardwareSerial &_serial; ///< Reference to usb serial interface object
+        HardwareSerial &_serial; // Reference to usb serial interface object
     };
 } // namespace Serials

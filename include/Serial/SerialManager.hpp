@@ -23,9 +23,9 @@ namespace Serials
      */
     enum class CommandType
     {
-        Read,   ///< Read command type
-        Write,  ///< Write command type
-        Execute ///< Execute command type
+        Read,   // Read command type
+        Write,  // Write command type
+        Execute // Execute command type
     };
 
     /**

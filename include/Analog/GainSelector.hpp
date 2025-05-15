@@ -25,7 +25,7 @@ namespace Analog
         Gain200, // 2: Gain (Rg = 1.02kOhm) = (200kOhm / 1.02kOhm) + 5 = 201.08
         Gain250, // 3: Gain (Rg = 806Ohm) = (200kOhm / 806Ohm) + 5 = 253.14
 
-        Count ///< Total count of gains
+        Count // Total count of gains
     };
 
     namespace GainSelector

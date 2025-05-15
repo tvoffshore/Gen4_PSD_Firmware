@@ -25,7 +25,7 @@ namespace Analog
         In2Out,       // 2: IN2 output signal
         Ground,       // 3: Ground plate
 
-        Count ///< Total count of input types
+        Count // Total count of input types
     };
 
     namespace InputSelector

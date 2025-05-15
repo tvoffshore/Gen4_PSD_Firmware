@@ -122,6 +122,6 @@ namespace Serials
         }
 
     private:
-        HardwareSerial &_serial; ///< Reference to uart hardware serial interface object
+        HardwareSerial &_serial; // Reference to uart hardware serial interface object
     };
 } // namespace Serials
