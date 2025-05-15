@@ -40,6 +40,7 @@ namespace Board
         constexpr auto pinSck = GPIO_NUM_1;      // SPI clock pin
         constexpr auto pinMosi = GPIO_NUM_47;    // SPI MOSI pin
         constexpr auto pinMiso = GPIO_NUM_48;    // SPI MISO pin
+        constexpr auto pinCsSd = GPIO_NUM_26;    // SPI chip select for SD pin
     } // namespace SpiConfig
 
     /**

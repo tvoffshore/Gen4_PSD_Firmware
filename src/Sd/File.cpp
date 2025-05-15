@@ -12,6 +12,9 @@
 #include "Sd/File.hpp"
 
 #include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
 #include <string.h>
 
 #include <Log.hpp>
@@ -46,9 +49,6 @@ private:
 
 namespace
 {
-    // SD chip select pin
-    constexpr auto pinCS = GPIO_NUM_26;
-
     // Delimiter of directory and filename
     const char *directoryDelimiter = "/";
 
@@ -65,16 +65,17 @@ namespace
 } // namespace
 
 /**
- * @brief Start SD file system class
+ * @brief Start SD file system
  *
+ * @param[in] csPin SD card chip select pin
  * @param[in] frequency Maximum SCK frequency
  * @return true if SD file system was started successfully, false otherwise
  */
-bool SD::FS::start(uint32_t frequency)
+bool SD::FS::start(uint8_t csPin, uint32_t frequency)
 {
     LOG_DEBUG("Start SD file system...");
 
-    bool result = sd.begin(pinCS, frequency);
+    bool result = sd.begin(csPin, frequency);
     if (result == true)
     {
         result = isAttached();
@@ -98,7 +99,7 @@ bool SD::FS::start(uint32_t frequency)
 }
 
 /**
- * @brief Start SD file system class
+ * @brief Stop SD file system
  */
 void SD::FS::stop()
 {
@@ -108,7 +109,7 @@ void SD::FS::stop()
 }
 
 /**
- * @brief Check if SD card is atteched
+ * @brief Check if SD card is attached
  *
  * @return true if SD card is attached, false otherwise
  */
@@ -120,9 +121,9 @@ bool SD::FS::isAttached()
 }
 
 /**
- * @brief Get SD file system
+ * @brief Get SD file system object
  *
- * @return SD file system
+ * @return Reference to SD file system object
  */
 SdFs &SD::FS::sdFs()
 {
@@ -160,6 +161,12 @@ bool SD::File::create(const char *directory, const char *fileName, const char *e
     assert(directory);
     assert(fileName);
     assert(extension);
+
+    if (SD::FS::isAttached() == false)
+    {
+        LOG_ERROR("No SD, file create failed");
+        return false;
+    }
 
     if (_file)
     {
@@ -215,26 +222,44 @@ bool SD::File::create(const char *directory, const char *fileName, const char *e
  */
 bool SD::File::open(const char *path, oflag_t flags)
 {
-    if (_file == false)
+    if (SD::FS::isAttached() == false)
     {
-        if (sd.exists(path))
-        {
-            strncpy(_path, path, sizeof(_path));
+        LOG_ERROR("No SD, file open failed");
+        return false;
+    }
 
-            // Try to open file
-            _file = sd.open(_path, flags);
-            if (_file)
-            {
-                // File was successfully opened, add timestamp
-                timestamp(T_ACCESS);
-            }
+    if (_file)
+    {
+        LOG_DEBUG("Previous file \"%s\" is still opened - close", _path);
 
-            LOG_INFO("File \"%s\" %s opened", _path, _file ? "is" : "isn't");
-        }
-        else
+        bool result = close();
+        if (result == false)
         {
-            LOG_ERROR("File \"%s\" isn't exist to open", path);
+            LOG_ERROR("Previous file \"%s\" can't be closed!", _path);
+            return false;
         }
+    }
+
+    if (path != nullptr)
+    {
+        strncpy(_path, path, sizeof(_path));
+    }
+
+    if (sd.exists(_path))
+    {
+        // Try to open file
+        _file = sd.open(_path, flags);
+        if (_file)
+        {
+            // File was successfully opened, add timestamp
+            timestamp(T_ACCESS);
+        }
+
+        LOG_INFO("File \"%s\" %s opened", _path, _file ? "is" : "isn't");
+    }
+    else
+    {
+        LOG_ERROR("File \"%s\" isn't exist to open", _path);
     }
 
     return _file;

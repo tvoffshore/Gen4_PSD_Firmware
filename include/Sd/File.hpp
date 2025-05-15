@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <stddef.h>
 
 #include <SdFat.h>
@@ -20,29 +22,30 @@ namespace SD
     namespace FS
     {
         /**
-         * @brief Start SD file system class
+         * @brief Start SD file system
          *
+         * @param[in] csPin SD card chip select pin
          * @param[in] frequency Maximum SCK frequency
          * @return true if SD file system was started successfully, false otherwise
          */
-        bool start(uint32_t frequency);
+        bool start(uint8_t csPin, uint32_t frequency);
 
         /**
-         * @brief Start SD file system class
+         * @brief Stop SD file system
          */
         void stop();
 
         /**
-         * @brief Check if SD card is atteched
+         * @brief Check if SD card is attached
          *
          * @return true if SD card is attached, false otherwise
          */
         bool isAttached();
 
         /**
-         * @brief Get SD file system
+         * @brief Get SD file system object
          *
-         * @return SD file system
+         * @return Reference to SD file system object
          */
         SdFs &sdFs();
 
@@ -62,7 +65,7 @@ namespace SD
      */
     class File
     {
-        constexpr static size_t pathMaxLength = 100; ///< Maximum length of path to file
+        constexpr static size_t pathMaxLength = 100; // Maximum length of path to file
 
     public:
         /**
@@ -82,7 +85,7 @@ namespace SD
          * @param flags Flags to open
          * @return True if the file is successfully opened, false otherwise
          */
-        bool open(const char *path, oflag_t flags = O_RDONLY);
+        bool open(const char *path = nullptr, oflag_t flags = O_RDONLY);
 
         /**
          * @brief Close the file

@@ -146,7 +146,7 @@ void setup()
     }
 
     // Start SD file system
-    status = SD::FS::start(Board::SpiConfig::frequency);
+    status = SD::FS::start(Board::SpiConfig::pinCsSd, Board::SpiConfig::frequency);
     if (status == false)
     {
         LOG_ERROR("SD initialization failed");
