@@ -1,12 +1,14 @@
 #include "SystemTime.hpp"
 
 #include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 #include <Arduino.h>
-#include <TimeLib.h>
 
 #include <Log.hpp>
 #include <Rtc.hpp>
+#include <TimeLib.h>
 
 namespace SystemTime
 {
@@ -31,7 +33,7 @@ namespace SystemTime
 
             time_t time;
 
-            bool result = RTC::getRtcTime(*pWire, time);
+            bool result = RTC::getTime(*pWire, time);
             if (result == false)
             {
                 LOG_ERROR("Get RTC time failed!");
@@ -51,8 +53,8 @@ namespace SystemTime
         {
             assert(string);
 
-            snprintf((char *)string, sizeof(DateTimeString), "%4d%02d%02dT%02d%02d%02d",
-                     tmYearToCalendar(tm.Year), tm.Month, tm.Day, tm.Hour, tm.Minute, tm.Second);
+            snprintf((char *)string, sizeof(DateTimeString), "%4d%02d%02dT%02d%02d%02d", tmYearToCalendar(tm.Year), tm.Month,
+                     tm.Day, tm.Hour, tm.Minute, tm.Second);
         }
 
         /**
@@ -121,7 +123,7 @@ namespace SystemTime
         }
 
         // Load RTC time
-        bool result = RTC::getRtcTime(*pWire, time);
+        bool result = RTC::getTime(*pWire, time);
         if (result == true)
         {
             char timeString[32];
@@ -150,7 +152,7 @@ namespace SystemTime
         }
 
         // Update RTC time
-        bool result = RTC::setRtcTime(*pWire, time);
+        bool result = RTC::setTime(*pWire, time);
         if (result == true)
         {
             char timeString[32];
@@ -173,10 +175,8 @@ namespace SystemTime
      *
      * @param[out] string String with date
      */
-    void getStringDate(char *string)
+    void getStringDate(DateString &string)
     {
-        assert(string);
-
         snprintf((char *)string, sizeof(DateString), "%04d%02d%02d", year(), month(), day());
     }
 
@@ -185,10 +185,8 @@ namespace SystemTime
      *
      * @param[out] string String with time
      */
-    void getStringTime(char *string)
+    void getStringTime(TimeString &string)
     {
-        assert(string);
-
         snprintf((char *)string, sizeof(TimeString), "%02d%02d%02d", hour(), minute(), second());
     }
 
@@ -198,7 +196,7 @@ namespace SystemTime
      * @param[in] string String with date
      * @return true if date was set successfully, false otherwise
      */
-    bool setStringDate(const char *string)
+    bool setStringDate(const DateString &string)
     {
         bool result = false;
         tmElements_t tm;
@@ -241,7 +239,7 @@ namespace SystemTime
      * @param[in] string String with time
      * @return true if date was set successfully, false otherwise
      */
-    bool setStringTime(const char *string)
+    bool setStringTime(const TimeString &string)
     {
         bool result = false;
         tmElements_t tm;

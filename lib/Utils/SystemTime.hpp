@@ -11,6 +11,9 @@
 
 #pragma once
 
+#include <stdbool.h>
+#include <stdint.h>
+
 #include <Wire.h>
 
 namespace SystemTime
@@ -63,14 +66,14 @@ namespace SystemTime
      *
      * @param[out] string String with date
      */
-    void getStringDate(char *string);
+    void getStringDate(DateString &string);
 
     /**
      * @brief Get current time packed to human-readable string
      *
      * @param[out] string String with time
      */
-    void getStringTime(char *string);
+    void getStringTime(TimeString &string);
 
     /**
      * @brief Set new date from human-readable string
@@ -78,7 +81,7 @@ namespace SystemTime
      * @param[in] string String with date
      * @return true if date was set successfully, false otherwise
      */
-    bool setStringDate(const char *string);
+    bool setStringDate(const DateString &string);
 
     /**
      * @brief Set new time from human-readable string
@@ -86,7 +89,7 @@ namespace SystemTime
      * @param[in] string String with time
      * @return true if date was set successfully, false otherwise
      */
-    bool setStringTime(const char *string);
+    bool setStringTime(const TimeString &string);
 
     /**
      * @brief Get current date and time

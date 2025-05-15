@@ -37,8 +37,10 @@ void registerSerialReadHandlers()
                                       {
                                           assert(sizeof(dataString) >= sizeof(SystemTime::DateString));
 
-                                          SystemTime::getStringDate(dataString);
+                                          SystemTime::DateString dateString;
+                                          SystemTime::getStringDate(dateString);
 
+                                          memcpy(dataString, dateString, sizeof(SystemTime::DateString));
                                           *responseString = dataString;
                                       });
 
@@ -47,8 +49,10 @@ void registerSerialReadHandlers()
                                       {
                                           assert(sizeof(dataString) >= sizeof(SystemTime::TimeString));
 
-                                          SystemTime::getStringTime(dataString);
+                                          SystemTime::TimeString timeString;
+                                          SystemTime::getStringTime(timeString);
 
+                                          memcpy(dataString, timeString, sizeof(SystemTime::TimeString));
                                           *responseString = dataString;
                                       });
 
@@ -88,13 +92,17 @@ void registerSerialWriteHandlers()
     Serials::Manager::subscribeToWrite(Serials::CommandId::Date,
                                        [](const char *dataString)
                                        {
-                                           SystemTime::setStringDate(dataString);
+                                           SystemTime::DateString dateString;
+                                           memcpy(dateString, dataString, sizeof(SystemTime::DateString));
+                                           SystemTime::setStringDate(dateString);
                                        });
 
     Serials::Manager::subscribeToWrite(Serials::CommandId::Time,
                                        [](const char *dataString)
                                        {
-                                           SystemTime::setStringTime(dataString);
+                                           SystemTime::TimeString timeString;
+                                           memcpy(timeString, dataString, sizeof(SystemTime::TimeString));
+                                           SystemTime::setStringTime(timeString);
                                        });
 
     Serials::Manager::subscribeToWrite(Serials::CommandId::LogLevel,
@@ -115,7 +123,7 @@ void setup()
 
     LOG_INFO("Application started, version %s", FwVersion::getVersionString());
 
-    // Initialize settings first
+    // Initialize settings
     Settings::initialize();
 
     // Initialize the log module

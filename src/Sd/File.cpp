@@ -15,8 +15,7 @@
 #include <string.h>
 
 #include <Log.hpp>
-
-#include "SystemTime.hpp"
+#include <SystemTime.hpp>
 
 /**
  * @brief Print-compatible string buffer
@@ -379,7 +378,7 @@ bool SD::File::read(char *buffer, size_t size)
 }
 
 /**
- * @brief Set a file's opration timestamp in its directory entry
+ * @brief Set a file's operation timestamp in its directory entry
  *
  * @param flags Type of operation to be timestamped (T_ACCESS, T_CREATE, T_WRITE)
  * @return true if timestamp was added, false otherwise
