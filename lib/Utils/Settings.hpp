@@ -48,9 +48,19 @@ namespace Settings
                   "Settings size list doesn't match to modules count!");
 
     /**
-     * @brief Initialize internal storage
+     * @brief Initialize settings storage
      */
     void initialize();
+
+    /**
+     * @brief Reset settings storage
+     */
+    void resetStorage();
+
+    /**
+     * @brief Update settings storage with new data
+     */
+    void updateStorage();
 
     /**
      * @brief Return adderss of the module settings
@@ -70,10 +80,11 @@ namespace Settings
     template <typename Type>
     uint8_t calculateCrc8(const Type &data)
     {
-        FastCRC8 crc8;
+        FastCRC8 fastCRC8;
         const uint8_t *rawData = static_cast<const uint8_t *>(static_cast<const void *>(&data));
 
-        return crc8.smbus(rawData, sizeof(Type));
+        uint8_t crc8 = fastCRC8.smbus(rawData, sizeof(Type));
+        return ~crc8;
     }
 
     /**
@@ -93,17 +104,13 @@ namespace Settings
         // Calculate CRC8 value for data to write
         uint8_t crc8 = calculateCrc8(data);
 
-        LOG_TRACE("Module %d address %d EEPROM put %d bytes:", id, address, sizeof(Type));
-        for (size_t i = 0; i < sizeof(Type); i++)
-        {
-            LOG_TRACE("[%d]: %d", i, ((uint8_t *)&data)[i]);
-        }
-
         // Update data and CRC8 value in storage
         EEPROM.put(address, data);
         EEPROM.put(address + sizeof(Type), crc8);
 
         EEPROM.commit();
+
+        updateStorage();
     }
 
     /**
@@ -132,14 +139,9 @@ namespace Settings
             EEPROM.get(address, storedData);
             EEPROM.get(address + sizeof(Type), storedCrc8);
 
-            LOG_TRACE("Module %d address %d EEPROM get %d bytes:", id, address, sizeof(Type));
-            for (size_t i = 0; i < sizeof(Type); i++)
-            {
-                LOG_TRACE("[%d]: %d", i, ((uint8_t *)&storedData)[i]);
-            }
-
             // Check data and return it if valid, otherwise write current data to storage
-            if (calculateCrc8(storedData) == storedCrc8)
+            uint8_t crc8 = calculateCrc8(storedData);
+            if (crc8 == storedCrc8)
             {
                 data = storedData;
             }
