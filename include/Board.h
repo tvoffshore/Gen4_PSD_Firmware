@@ -18,6 +18,11 @@
 
 namespace Board
 {
+    // Minimum CPU frequency
+    constexpr static uint32_t cpuFrequencyMinMHz = 10;
+    // Maximum CPU frequency
+    constexpr static uint32_t cpuFrequencyMaxMHz = 240;
+
     // USB serial interface configuration
     namespace UsbConfig
     {
@@ -72,6 +77,13 @@ namespace Board
      * @brief Setup build-in LED
      */
     void setupLED();
+
+    /**
+     * @brief Set CPU frequency
+     *
+     * @param frequencyMHz New frequency (10MHz min, 240MHz max)
+     */
+    void setCpuFrequency(uint32_t frequencyMHz);
 
     /**
      * @brief Setup board power

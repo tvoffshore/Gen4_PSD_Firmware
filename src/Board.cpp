@@ -32,6 +32,9 @@ namespace
     // Photo diode pin (ADC_1_CH6)
     constexpr auto pinPhotoDiode = GPIO_NUM_7;
 
+    // Max time to wait LoRa is ready
+    constexpr size_t loraReadyWaitTimeMs = 1000;
+
     /**
      * @brief Convert seconds to microseconds
      *
@@ -68,16 +71,19 @@ namespace
         digitalWrite(LoRa_NSS, HIGH);
 
         // Wait until LoRa chip is ready
-        size_t timeoutMs = 1000;
-        while (digitalRead(LoRa_BUSY))
+        size_t expiredMs = 0;
+        bool isReady = digitalRead(LoRa_BUSY) == 0;
+        while (isReady == false && expiredMs < loraReadyWaitTimeMs)
         {
             delay(1);
-            timeoutMs--;
-            if (timeoutMs == 0)
-            {
-                LOG_ERROR("Waiting LoRa ready failed");
-                return;
-            }
+            expiredMs++;
+            isReady = digitalRead(LoRa_BUSY) == 0;
+        }
+        LOG_DEBUG("LoRa %s ready in %d ms", isReady ? "is" : "isn't", expiredMs);
+        if (isReady == false)
+        {
+            LOG_ERROR("Waiting LoRa ready failed");
+            return;
         }
 
         // Move LoRa chip into sleep mode
@@ -208,6 +214,26 @@ void Board::setupLED()
     pinMode(BUILTIN_LED, OUTPUT);
     // Turn off build-in LED (LOW - off, HIGH - on)
     digitalWrite(BUILTIN_LED, LOW);
+}
+
+/**
+ * @brief Set CPU frequency
+ *
+ * @param frequencyMHz New frequency (10MHz min, 240MHz max)
+ */
+void Board::setCpuFrequency(uint32_t frequencyMHz)
+{
+    if (frequencyMHz < cpuFrequencyMinMHz)
+    {
+        frequencyMHz = cpuFrequencyMinMHz;
+    }
+    if (frequencyMHz > cpuFrequencyMaxMHz)
+    {
+        frequencyMHz = cpuFrequencyMaxMHz;
+    }
+
+    setCpuFrequencyMhz(frequencyMHz);
+    LOG_DEBUG("CPU frequency: %u MHz", getCpuFrequencyMhz());
 }
 
 /**

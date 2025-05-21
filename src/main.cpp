@@ -120,6 +120,8 @@ void setup()
 {
     // Setup the board first
     Board::setup();
+    // Set CPU frequency to the minimum possible
+    Board::setCpuFrequency(Board::cpuFrequencyMinMHz);
 
     LOG_INFO("Application started, version %s", FwVersion::getVersionString());
 
