@@ -131,12 +131,17 @@ void setup()
 
     // Initialize battery reading
     Battery::initialize();
+    auto batteryStatus = Battery::readStatus();
+    LOG_INFO("Battery voltage %umV, level %u%%", batteryStatus.voltage, batteryStatus.level);
 
     // Initialize serial manager
     Serials::Manager::initialize();
     // Register local serial handlers
     registerSerialReadHandlers();
     registerSerialWriteHandlers();
+
+    // Power up the board
+    Board::powerUp();
 
     // Initialize system time with RTC
     bool status = SystemTime::initialize(Wire);
@@ -159,8 +164,6 @@ void setup()
     }
 
     FileLoader::initialize();
-
-    LOG_INFO("Setup done");
 }
 
 /**
