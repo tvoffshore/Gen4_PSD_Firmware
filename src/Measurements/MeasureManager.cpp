@@ -55,12 +55,43 @@ namespace
     // Analog sensor channel 2 enable pin
     constexpr auto pinAdc2Enable = GPIO_NUM_3;
 
-    // Default time to take measurements, seconds
-    constexpr uint32_t measureIntervalDefault = 600;
-    // Default time between measurements, seconds
-    constexpr uint32_t pauseIntervalDefault = 300;
-    // Jitter time of measurements interval, seconds
-    constexpr uint32_t measureIntervalJitter = 5;
+    namespace DataTypeMask
+    {
+        constexpr uint8_t Psd = (1 << static_cast<size_t>(DataType::Psd));             // PSD data type
+        constexpr uint8_t Statistic = (1 << static_cast<size_t>(DataType::Statistic)); // Statistic data type
+        constexpr uint8_t Raw = (1 << static_cast<size_t>(DataType::Raw));             // Raw data type
+        constexpr uint8_t All = Raw | Statistic | Psd;
+    } // namespace DataTypeId
+
+    namespace SensorTypeMask
+    {
+        constexpr uint8_t Accel = (1 << static_cast<size_t>(SensorType::Accel));             // Accelerometer sensor
+        constexpr uint8_t Gyro = (1 << static_cast<size_t>(SensorType::Gyro));               // Gyroscope sensor
+        constexpr uint8_t Angle = (1 << static_cast<size_t>(SensorType::Angle));             // Roll/Pitch angle sensor
+        constexpr uint8_t Adc1 = (1 << static_cast<size_t>(SensorType::Adc1));               // Analog 1 sensor
+        constexpr uint8_t Adc2 = (1 << static_cast<size_t>(SensorType::Adc2));               // Analog 2 sensor
+        constexpr uint8_t AccelResult = (1 << static_cast<size_t>(SensorType::AccelResult)); // Accelerometer sensor
+        constexpr uint8_t All = AccelResult | Adc2 | Adc1 | Angle | Gyro | Accel;
+    } // namespace Sensor
+
+    // Default PSD points count (PSD segment size = 2^x)
+    constexpr uint8_t psdPointsDefault = 8;
+    // Minimum PSD points
+    constexpr uint8_t psdPointsMin = 1;
+    // Maximum PSD points
+    constexpr uint8_t psdPointsMax = 10;
+
+    // Default PSD cutoff to store the results
+    constexpr uint16_t psdCutoffDefault = 128;
+    // Minimum PSD cutoff
+    constexpr uint16_t psdCutoffMin = 1;
+    // Maximum PSD cutoff
+    constexpr uint16_t psdCutoffMax = 1024;
+
+    // Default data type to calculate and store on SD
+    constexpr uint8_t dataTypeMaskDefault = DataTypeMask::All;
+    // Default sensor type for measurements
+    constexpr uint8_t sensorTypeMaskDefault = SensorTypeMask::All;
 
     // Default sampling frequency, Hz
     constexpr uint8_t sampleFrequencyDefault = 40;
@@ -69,22 +100,16 @@ namespace
     // Maximum sampling frequency, Hz
     constexpr uint8_t sampleFrequencyMax = 100;
 
-    // Default points to calculate PSD segment size, 2^x
-    constexpr uint8_t pointsPsdDefault = 8;
-    // Minimum points to calculate PSD segment size, 2^x
-    constexpr uint8_t pointsPsdMin = 2;
-    // Maximum points to calculate PSD segment size, 2^x
-    constexpr uint8_t pointsPsdMax = 10;
-
-    // Default points to store the PSD results
-    constexpr uint16_t pointsCutoffDefault = 128;
-    // Minimum points to store the PSD results
-    constexpr uint16_t pointsCutoffMin = 1;
-    // Maximum points to store the PSD results
-    constexpr uint16_t pointsCutoffMax = 1024;
-
-    // State of statistic (1 enable, 0 disable)
-    constexpr uint8_t statisticStateDefault = 1;
+    // Default time to take measurements, seconds
+    constexpr uint32_t measureIntervalDefault = 600;
+    // Minimum time to take measurements, seconds
+    constexpr uint32_t measureIntervalMin = 3;
+    // Jitter time of measurements interval, seconds
+    constexpr uint32_t measureIntervalJitter = 5;
+    // Default time between measurements, seconds
+    constexpr uint32_t pauseIntervalDefault = 300;
+    // Minimum time between measurements, seconds
+    constexpr uint32_t pauseIntervalMin = 3;
 
     // Settings identifier in internal storage
     constexpr auto settingsId = Settings::Id::Measurements;
@@ -149,10 +174,11 @@ namespace
     {
         uint32_t measureInterval; // Time for measuring, seconds
         uint32_t pauseInterval;   // Time between measurements, seconds
-        uint16_t pointsCutoff;    // Points to store the PSD results
-        uint8_t frequency;        // Sampling frequency, Hz
-        uint8_t pointsPsd;        // Points to calculate PSD segment size, 2^x
-        uint8_t statisticState;   // State of statistic (1 enable, 0 disable)
+        uint16_t psdCutoff;       // PSD cutoff to store the results
+        uint8_t psdPoints;        // PSD points count (PSD segment size = 2^x)
+        uint8_t sampleFrequency;  // Sampling frequency, Hz
+        uint8_t sensorTypeMask;   // Sensor type bitmask for measurements
+        uint8_t dataTypeMask;     // Data type bitmask to calculate and store on SD
     };
 #pragma pack(pop)
 
@@ -197,19 +223,19 @@ namespace
         /**
          * @brief Setup new context
          *
-         * @param[in] pointsPsd Points to calculate PSD segment size, 2^x
+         * @param[in] psdPoints PSD points count (PSD segment size = 2^x)
          * @param[in] sampleFrequency Sampling frequency, Hz
          */
-        void setup(uint8_t pointsPsd, uint8_t sampleFrequency)
+        void setup(uint8_t psdPoints, uint8_t sampleFrequency)
         {
             static const size_t pow2[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192};
 
-            assert(pointsPsd < sizeof(pow2) / sizeof(*pow2));
+            assert(psdPoints < sizeof(pow2) / sizeof(*pow2));
 
             // Reset count of ready segments
             segmentCount = 0;
             // Determine segment size
-            segmentSize = pow2[pointsPsd];
+            segmentSize = pow2[psdPoints];
             // Calculate interval between samples
             sampleTimeMs = millisPerSecond / sampleFrequency;
             // Calculate time of segment accumulating
@@ -276,10 +302,11 @@ namespace
     MeasureSettings settings = {
         .measureInterval = measureIntervalDefault,
         .pauseInterval = pauseIntervalDefault,
-        .pointsCutoff = pointsCutoffDefault,
-        .frequency = sampleFrequencyDefault,
-        .pointsPsd = pointsPsdDefault,
-        .statisticState = statisticStateDefault,
+        .psdCutoff = psdCutoffDefault,
+        .psdPoints = psdPointsDefault,
+        .sampleFrequency = sampleFrequencyDefault,
+        .sensorTypeMask = sensorTypeMaskDefault,
+        .dataTypeMask = dataTypeMaskDefault,
     };
 
     // IMU sensor functions
@@ -291,6 +318,7 @@ namespace
     void startSampling();
     void stopSampling();
     void setupMeasurements(uint8_t sampleCount, uint8_t sampleFrequency);
+    void restartMeasurements();
     void performCalculations(size_t index);
     void calculateAccelResult(const int16_t *pAccX, float meanAccX, const int16_t *pAccY, float meanAccY, size_t length);
     void saveMeasurements();
@@ -358,6 +386,200 @@ namespace
     constexpr float rawGyroToDegs(int16_t raw)
     {
         return (float)raw * gyroRangeDps / 32768;
+    }
+
+    /**
+     * @brief Set PSD points setting
+     *
+     * @param psdPoints New PSD points
+     * @return true if new setting was set, false otherwise
+     */
+    bool setPsdPoints(uint8_t psdPoints)
+    {
+        bool result = false;
+
+        if (psdPoints < psdPointsMin)
+        {
+            psdPoints = psdPointsMin;
+        }
+        else if (psdPoints > psdPointsMax)
+        {
+            psdPoints = psdPointsMax;
+        }
+
+        if (settings.psdPoints != psdPoints)
+        {
+            // Update setting
+            settings.psdPoints = psdPoints;
+            Settings::update(settingsId, settings);
+            result = true;
+        }
+
+        return result;
+    }
+
+    /**
+     * @brief Set PSD cutoff setting
+     *
+     * @param psdCutoff New PSD cutoff
+     * @return true if new setting was set, false otherwise
+     */
+    bool setPsdCutoff(uint16_t psdCutoff)
+    {
+        bool result = false;
+
+        if (psdCutoff < psdCutoffMin)
+        {
+            psdCutoff = psdCutoffMin;
+        }
+        else if (psdCutoff > psdCutoffMax)
+        {
+            psdCutoff = psdCutoffMax;
+        }
+
+        if (settings.psdCutoff != psdCutoff)
+        {
+            // Update setting
+            settings.psdCutoff = psdCutoff;
+            Settings::update(settingsId, settings);
+            result = true;
+        }
+
+        return result;
+    }
+
+    /**
+     * @brief Set data type setting
+     *
+     * @param dataTypeMask New data type mask
+     * @return true if new setting was set, false otherwise
+     */
+    bool setDataTypeMask(uint8_t dataTypeMask)
+    {
+        bool result = false;
+
+        if (dataTypeMask == 0 || dataTypeMask > DataTypeMask::All)
+        {
+            dataTypeMask = DataTypeMask::All;
+        }
+
+        if (settings.dataTypeMask != dataTypeMask)
+        {
+            // Update setting
+            settings.dataTypeMask = dataTypeMask;
+            Settings::update(settingsId, settings);
+            result = true;
+        }
+
+        return result;
+    }
+
+    /**
+     * @brief Set sensor type setting
+     *
+     * @param sensorTypeMask New sensor type mask
+     * @return true if new setting was set, false otherwise
+     */
+    bool setSensorTypeMask(uint8_t sensorTypeMask)
+    {
+        bool result = false;
+
+        if (sensorTypeMask == 0 || sensorTypeMask > SensorTypeMask::All)
+        {
+            sensorTypeMask = SensorTypeMask::All;
+        }
+
+        if (settings.sensorTypeMask != sensorTypeMask)
+        {
+            // Update setting
+            settings.sensorTypeMask = sensorTypeMask;
+            Settings::update(settingsId, settings);
+            result = true;
+        }
+
+        return result;
+    }
+
+    /**
+     * @brief Set sampling frequency setting
+     *
+     * @param sampleFrequency New sampling frequency
+     * @return true if new setting was set, false otherwise
+     */
+    bool setSampleFrequency(uint8_t sampleFrequency)
+    {
+        bool result = false;
+
+        if (sampleFrequency < sampleFrequencyMin)
+        {
+            sampleFrequency = sampleFrequencyMin;
+        }
+        else if (sampleFrequency > sampleFrequencyMax)
+        {
+            sampleFrequency = sampleFrequencyMax;
+        }
+
+        if (settings.sampleFrequency != sampleFrequency)
+        {
+            // Update setting
+            settings.sampleFrequency = sampleFrequency;
+            Settings::update(settingsId, settings);
+            result = true;
+        }
+
+        return result;
+    }
+
+    /**
+     * @brief Set measure interval setting
+     *
+     * @param measureInterval New measure interval
+     * @return true if new setting was set, false otherwise
+     */
+    bool setMeasureInterval(uint32_t measureInterval)
+    {
+        bool result = false;
+
+        if (measureInterval < measureIntervalMin)
+        {
+            measureInterval = measureIntervalMin;
+        }
+
+        if (settings.measureInterval != measureInterval)
+        {
+            // Update setting
+            settings.measureInterval = measureInterval;
+            Settings::update(settingsId, settings);
+            result = true;
+        }
+
+        return result;
+    }
+
+    /**
+     * @brief Set pause interval setting
+     *
+     * @param pauseInterval New pause interval
+     * @return true if new setting was set, false otherwise
+     */
+    bool setPauseInterval(uint32_t pauseInterval)
+    {
+        bool result = false;
+
+        if (pauseInterval < pauseIntervalMin)
+        {
+            pauseInterval = pauseIntervalMin;
+        }
+
+        if (settings.pauseInterval != pauseInterval)
+        {
+            // Update setting
+            settings.pauseInterval = pauseInterval;
+            Settings::update(settingsId, settings);
+            result = true;
+        }
+
+        return result;
     }
 
     /**
@@ -527,15 +749,15 @@ namespace
     /**
      * @brief Setup measurements
      *
-     * @param[in] pointsPsd Points to calculate PSD segment size, 2^x
+     * @param[in] psdPoints PSD points count (PSD segment size = 2^x)
      * @param[in] sampleFrequency Sampling frequency, Hz
      */
-    void setupMeasurements(uint8_t pointsPsd, uint8_t sampleFrequency)
+    void setupMeasurements(uint8_t psdPoints, uint8_t sampleFrequency)
     {
-        assert(pointsPsd >= pointsPsdMin && pointsPsd <= pointsPsdMax);
+        assert(psdPoints >= psdPointsMin && psdPoints <= psdPointsMax);
         assert(sampleFrequency >= sampleFrequencyMin && sampleFrequency <= sampleFrequencyMax);
 
-        context.setup(pointsPsd, sampleFrequency);
+        context.setup(psdPoints, sampleFrequency);
 
         LOG_INFO("PSD setup: segment size %d samples, sample time %d ms, segment time %d ms",
                  context.segmentSize, context.sampleTimeMs, context.segmentTimeMs);
@@ -554,6 +776,19 @@ namespace
 
         // Reset measurements statistic
         resetStatistics();
+    }
+
+    /**
+     * @brief Restart measurements with current settings
+     */
+    void restartMeasurements()
+    {
+        // Stop sensors sampling
+        stopSampling();
+        // Setup measurements with current settings
+        setupMeasurements(settings.psdPoints, settings.sampleFrequency);
+        // Start sensors sampling
+        startSampling();
     }
 
     /**
@@ -667,14 +902,14 @@ namespace
      */
     void saveMeasurements()
     {
-        // If 𝑁 is even (segmentSize = 2^x), you have 𝑁/2+1 useful components
+        // If 𝑁 is even (segmentSize = 2^N), you have 𝑁/2+1 useful components
         // because the symmetric part of the FFT spectrum for real-valued signals
         // does not provide additional information beyond the Nyquist frequency
         size_t resultPoints = context.segmentSize / 2 + 1;
-        if (resultPoints > settings.pointsCutoff)
+        if (resultPoints > settings.psdCutoff)
         {
             // Limit result points
-            resultPoints = settings.pointsCutoff;
+            resultPoints = settings.psdCutoff;
         }
 
         Measurements::PsdBin coreBinAdc1;
@@ -720,7 +955,7 @@ namespace
                      context.startDateTime.Day, context.startDateTime.Month, context.startDateTime.Year,
                      context.startDateTime.Hour, context.startDateTime.Minute, context.startDateTime.Second);
             sdFile.println(string);
-            snprintf(string, sizeof(string), "Logging Rate,%u", settings.frequency);
+            snprintf(string, sizeof(string), "Logging Rate,%u", settings.sampleFrequency);
             sdFile.println(string);
             sdFile.println(""); // End of header
 
@@ -1442,11 +1677,38 @@ namespace
 
         LOG_TRACE("Register serial read measurement handlers");
 
+        Serials::Manager::subscribeToRead(Serials::CommandId::PsdPoints,
+                                          [](const char **responseString)
+                                          {
+                                              snprintf(dataString, sizeof(dataString), "%u", settings.psdPoints);
+                                              *responseString = dataString;
+                                          });
+
+        Serials::Manager::subscribeToRead(Serials::CommandId::PsdCutoff,
+                                          [](const char **responseString)
+                                          {
+                                              snprintf(dataString, sizeof(dataString), "%u", settings.psdCutoff);
+                                              *responseString = dataString;
+                                          });
+
+        Serials::Manager::subscribeToRead(Serials::CommandId::DataTypeControl,
+                                          [](const char **responseString)
+                                          {
+                                              snprintf(dataString, sizeof(dataString), "%u", settings.dataTypeMask);
+                                              *responseString = dataString;
+                                          });
+
+        Serials::Manager::subscribeToRead(Serials::CommandId::MeasureControl,
+                                          [](const char **responseString)
+                                          {
+                                              snprintf(dataString, sizeof(dataString), "%u", settings.sensorTypeMask);
+                                              *responseString = dataString;
+                                          });
+
         Serials::Manager::subscribeToRead(Serials::CommandId::MeasureFrequency,
                                           [](const char **responseString)
                                           {
-                                              snprintf(dataString, sizeof(dataString), "%u", settings.frequency);
-
+                                              snprintf(dataString, sizeof(dataString), "%u", settings.sampleFrequency);
                                               *responseString = dataString;
                                           });
 
@@ -1454,7 +1716,6 @@ namespace
                                           [](const char **responseString)
                                           {
                                               snprintf(dataString, sizeof(dataString), "%u", settings.measureInterval);
-
                                               *responseString = dataString;
                                           });
 
@@ -1462,31 +1723,6 @@ namespace
                                           [](const char **responseString)
                                           {
                                               snprintf(dataString, sizeof(dataString), "%u", settings.pauseInterval);
-
-                                              *responseString = dataString;
-                                          });
-
-        Serials::Manager::subscribeToRead(Serials::CommandId::PointsPsd,
-                                          [](const char **responseString)
-                                          {
-                                              snprintf(dataString, sizeof(dataString), "%u", settings.pointsPsd);
-
-                                              *responseString = dataString;
-                                          });
-
-        Serials::Manager::subscribeToRead(Serials::CommandId::PointsCutoff,
-                                          [](const char **responseString)
-                                          {
-                                              snprintf(dataString, sizeof(dataString), "%u", settings.pointsCutoff);
-
-                                              *responseString = dataString;
-                                          });
-
-        Serials::Manager::subscribeToRead(Serials::CommandId::StatisticState,
-                                          [](const char **responseString)
-                                          {
-                                              snprintf(dataString, sizeof(dataString), "%u", settings.statisticState);
-
                                               *responseString = dataString;
                                           });
     }
@@ -1498,109 +1734,73 @@ namespace
     {
         LOG_TRACE("Register serial write measurement handlers");
 
+        Serials::Manager::subscribeToWrite(Serials::CommandId::PsdPoints,
+                                           [](const char *dataString)
+                                           {
+                                               uint8_t value = atoi(dataString);
+                                               bool result = setPsdPoints(value);
+                                               if (result == true)
+                                               {
+                                                   // Restart measurements if PSD points was changed
+                                                   restartMeasurements();
+                                               }
+                                           });
+
+        Serials::Manager::subscribeToWrite(Serials::CommandId::PsdCutoff,
+                                           [](const char *dataString)
+                                           {
+                                               uint16_t value = atoi(dataString);
+                                               setPsdCutoff(value);
+                                           });
+
+        Serials::Manager::subscribeToWrite(Serials::CommandId::DataTypeControl,
+                                           [](const char *dataString)
+                                           {
+                                               uint8_t value = atoi(dataString);
+                                               bool result = setDataTypeMask(value);
+                                               if (result == true)
+                                               {
+                                                   // Restart measurements if data type was changed
+                                                   restartMeasurements();
+                                               }
+                                           });
+
+        Serials::Manager::subscribeToWrite(Serials::CommandId::MeasureControl,
+                                           [](const char *dataString)
+                                           {
+                                               uint8_t value = atoi(dataString);
+                                               bool result = setSensorTypeMask(value);
+                                               if (result == true)
+                                               {
+                                                   // Restart measurements if sensor type was changed
+                                                   restartMeasurements();
+                                               }
+                                           });
+
         Serials::Manager::subscribeToWrite(Serials::CommandId::MeasureFrequency,
                                            [](const char *dataString)
                                            {
                                                uint8_t value = atoi(dataString);
-
-                                               if (value < sampleFrequencyMin)
+                                               bool result = setSampleFrequency(value);
+                                               if (result == true)
                                                {
-                                                   value = sampleFrequencyMin;
+                                                   // Restart measurements if sampling frequency was changed
+                                                   restartMeasurements();
                                                }
-                                               else if (value > sampleFrequencyMax)
-                                               {
-                                                   value = sampleFrequencyMax;
-                                               }
-
-                                               // Stop sensors sampling
-                                               stopSampling();
-
-                                               // Update measure frequency setting
-                                               settings.frequency = value;
-                                               Settings::update(settingsId, settings);
-
-                                               // Restart measurements
-                                               setupMeasurements(settings.pointsPsd, settings.frequency);
-
-                                               // Start sensors sampling
-                                               startSampling();
                                            });
 
         Serials::Manager::subscribeToWrite(Serials::CommandId::MeasureInterval,
                                            [](const char *dataString)
                                            {
                                                uint32_t value = atoi(dataString);
-
-                                               // Update measure interval setting
-                                               settings.measureInterval = value;
-                                               Settings::update(settingsId, settings);
+                                               setMeasureInterval(value);
                                            });
 
         Serials::Manager::subscribeToWrite(Serials::CommandId::PauseInterval,
                                            [](const char *dataString)
                                            {
                                                uint32_t value = atoi(dataString);
-
-                                               // Update pause interval setting
-                                               settings.pauseInterval = value;
-                                               Settings::update(settingsId, settings);
-                                           });
-
-        Serials::Manager::subscribeToWrite(Serials::CommandId::PointsPsd,
-                                           [](const char *dataString)
-                                           {
-                                               uint8_t value = atoi(dataString);
-
-                                               if (value < pointsPsdMin)
-                                               {
-                                                   value = pointsPsdMin;
-                                               }
-                                               else if (value > pointsPsdMax)
-                                               {
-                                                   value = pointsPsdMax;
-                                               }
-
-                                               // Stop sensors sampling
-                                               stopSampling();
-
-                                               // Update points to calculate PSD segment size
-                                               settings.pointsPsd = value;
-                                               Settings::update(settingsId, settings);
-
-                                               // Restart measurements
-                                               setupMeasurements(settings.pointsPsd, settings.frequency);
-
-                                               // Start sensors sampling
-                                               startSampling();
-                                           });
-
-        Serials::Manager::subscribeToWrite(Serials::CommandId::PointsCutoff,
-                                           [](const char *dataString)
-                                           {
-                                               uint16_t value = atoi(dataString);
-
-                                               if (value < pointsCutoffMin)
-                                               {
-                                                   value = pointsCutoffMin;
-                                               }
-                                               else if (value > pointsCutoffMax)
-                                               {
-                                                   value = pointsCutoffMax;
-                                               }
-
-                                               // Update points to store the PSD results setting
-                                               settings.pointsCutoff = value;
-                                               Settings::update(settingsId, settings);
-                                           });
-
-        Serials::Manager::subscribeToWrite(Serials::CommandId::StatisticState,
-                                           [](const char *dataString)
-                                           {
-                                               uint8_t value = atoi(dataString);
-
-                                               // Update state of statistic setting
-                                               settings.statisticState = value;
-                                               Settings::update(settingsId, settings);
+                                               setPauseInterval(value);
                                            });
     }
 } // namespace
@@ -1666,7 +1866,7 @@ bool Manager::initialize()
         EventBits_t events = eventGroup.wait(EventBits::taskIsIdle);
         if (events & EventBits::taskIsIdle)
         {
-            setupMeasurements(settings.pointsPsd, settings.frequency);
+            setupMeasurements(settings.psdPoints, settings.sampleFrequency);
 
             // Start sensors sampling
             startSampling();

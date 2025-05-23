@@ -26,7 +26,7 @@
 #ifdef DEBUG
 #define LOG_LEVEL LOG_LEVEL_DEBUG
 #else
-#define LOG_LEVEL LOG_LEVEL_NONE
+#define LOG_LEVEL LOG_LEVEL_INFO
 #endif // DEBUG
 #endif // LOG_LEVEL
 

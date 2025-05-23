@@ -18,12 +18,12 @@ namespace Measurements
      */
     enum class SensorType : int
     {
-        Adc1,
-        Adc2,
         Accel,
-        AccelResult,
         Gyro,
         Angle,
+        Adc1,
+        Adc2,
+        AccelResult,
 
         Count
     };

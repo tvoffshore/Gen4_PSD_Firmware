@@ -19,12 +19,12 @@ namespace
 {
     // Directory names for different sensor and data types
     const char *directories[static_cast<int>(SensorType::Count)][static_cast<int>(DataType::Count)] = {
-        {"PSD/ADC1", "STAT/ADC1", "RAW/ADC1"},
-        {"PSD/ADC2", "STAT/ADC2", "RAW/ADC2"},
         {"PSD/ACC", "STAT/ACC", "RAW/ACC"},
-        {"PSD/ACC_RES", "STAT/ACC_RES", "RAW/ACC_RES"},
         {"PSD/GYR", "STAT/GYR", "RAW/GYR"},
         {"PSD/ANG", "STAT/ANG", "RAW/ANG"},
+        {"PSD/ADC1", "STAT/ADC1", "RAW/ADC1"},
+        {"PSD/ADC2", "STAT/ADC2", "RAW/ADC2"},
+        {"PSD/ACC_RES", "STAT/ACC_RES", "RAW/ACC_RES"},
     };
 } // namespace
 

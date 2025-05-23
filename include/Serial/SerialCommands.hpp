@@ -33,21 +33,27 @@ namespace Serials
         SlaveAddress,     // 0: Set/Get serial device slave address
         Date,             // 1: Set/Get current date
         Time,             // 2: Set/Get current time
-        SerialSelect,     // 3: Set/Get serial interface selection
-        MeasureFrequency, // 4: Set/Get the frequency of measurements
-        MeasureInterval,  // 5: Set/Get the interval of measurements
-        PauseInterval,    // 6: Set/Get the interval of pause between measurements
-        PointsPsd,        // 7: Set/Get the points to calculate PSD segment size, 2^x
-        PointsCutoff,     // 8: Set/Get the points to store the PSD results
-        StatisticState,   // 9: Set/Get the state of statistic (1 enable, 0 disable)
-        LogLevel,         // 10: Set/Get serial debug log level
-        FwVersion,        // 11: Get FW version information
-        BatteryStatus,    // 12: Get battery status
-        DownloadRecent,   // 13: Set download range starting from now
-        DownloadHistory,  // 14: Set download range starting from timestamp
-        DownloadType,     // 15: Set download data type
-        DownloadSize,     // 16: Get download data size in bytes
-        DownloadData,     // 17: Get next data chunk
+        PsdPoints,        // 3: Set/Get the PSD points count (PSD segment size = 2^x)
+        PsdCutoff,        // 4: Set/Get PSD cutoff to store the results
+        DataTypeControl,  // 5: Set/Get bitmask for data type to calculate and store on SD
+        MeasureControl,   // 6: Set/Get bitmask for sensor measurements capabilities
+        MeasureFrequency, // 7: Set/Get the frequency of measurements
+        MeasureInterval,  // 8: Set/Get the interval of measurements
+        PauseInterval,    // 9: Set/Get the interval of pause between measurements
+        AccelRange,       // 10: Set/Get ACCEL sensor range
+        GyroRange,        // 11: Set/Get GYRO sensor range
+        AdcVoltage,       // 12: Set/Get desired voltage for ADC1/ADC2 sensors
+        GainSelect,       // 13: Set/Get gain selection for ADC1 sensor
+        InputTypeSelect,  // 14: Set/Get input type selection for ADC2 sensor
+        SerialSelect,     // 15: Set/Get serial interface selection
+        LogLevel,         // 16: Set/Get log messages level
+        BatteryStatus,    // 17: Get battery status
+        FwVersion,        // 18: Get FW version information
+        DownloadRecent,   // 19: Set download range starting from now
+        DownloadHistory,  // 20: Set download range starting from timestamp
+        DownloadType,     // 21: Set download data type
+        DownloadSize,     // 22: Get download data size in bytes
+        DownloadData,     // 23: Get download data
 
         Commands // Total number of serial commands
     };
@@ -80,8 +86,23 @@ namespace Serials
             .accessMask = AccessMask::read | AccessMask::write,
         },
         {
-            .id = CommandId::SerialSelect,
-            .string = "SERS",
+            .id = CommandId::PsdPoints,
+            .string = "PSDP",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::PsdCutoff,
+            .string = "PSDC",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::DataTypeControl,
+            .string = "DTYP",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::MeasureControl,
+            .string = "MCTR",
             .accessMask = AccessMask::read | AccessMask::write,
         },
         {
@@ -100,18 +121,33 @@ namespace Serials
             .accessMask = AccessMask::read | AccessMask::write,
         },
         {
-            .id = CommandId::PointsPsd,
-            .string = "PPSD",
+            .id = CommandId::AccelRange,
+            .string = "ACRG",
             .accessMask = AccessMask::read | AccessMask::write,
         },
         {
-            .id = CommandId::PointsCutoff,
-            .string = "PCUT",
+            .id = CommandId::GyroRange,
+            .string = "GYRG",
             .accessMask = AccessMask::read | AccessMask::write,
         },
         {
-            .id = CommandId::StatisticState,
-            .string = "STAT",
+            .id = CommandId::AdcVoltage,
+            .string = "VSNS",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::GainSelect,
+            .string = "GNSL",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::InputTypeSelect,
+            .string = "ITSL",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::SerialSelect,
+            .string = "SERS",
             .accessMask = AccessMask::read | AccessMask::write,
         },
         {
@@ -120,13 +156,13 @@ namespace Serials
             .accessMask = AccessMask::read | AccessMask::write,
         },
         {
-            .id = CommandId::FwVersion,
-            .string = "FVER",
+            .id = CommandId::BatteryStatus,
+            .string = "BATT",
             .accessMask = AccessMask::read,
         },
         {
-            .id = CommandId::BatteryStatus,
-            .string = "BATT",
+            .id = CommandId::FwVersion,
+            .string = "FVER",
             .accessMask = AccessMask::read,
         },
         {
