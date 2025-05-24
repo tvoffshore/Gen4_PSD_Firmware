@@ -27,6 +27,7 @@ namespace Settings
     {
         SerialManager, // SerialManager settings id
         Measurements,  // Measurements setting id
+        ImuSensor,     // ImuSensor setting id
         GainSelector,  // GainSelector settings id
         InputSelector, // InputSelector settings id
         VddController, // VddController settings id
@@ -38,7 +39,8 @@ namespace Settings
     // Modules settings sizes. Settings saved along with corresponding CRC8 value right after data
     constexpr size_t settingsSizeList[] = {
         6,  // SerialManager (int + uint8_t + CRC8) = 6
-        14, // Measurements (uint32_t * 2 + uint16_t + uint8_t * 3 + CRC8) = 14
+        15, // Measurements (uint32_t * 2 + uint16_t + uint8_t * 4 + CRC8) = 14
+        3,  // ImuSensor (uint8_t + uint8_t + CRC8) = 3
         2,  // GainSelector (uint8_t + CRC8) = 2
         2,  // InputSelector (uint8_t + CRC8) = 2
         5,  // VddController (float + CRC8) = 5
@@ -128,7 +130,8 @@ namespace Settings
         if (forceUpdate == false)
         {
             assert(id < Settings::Id::Count);
-            assert(sizeof(Type) < settingsSizeList[static_cast<size_t>(id)]);
+            // Type + CRC8 == size
+            assert(sizeof(Type) + 1 == settingsSizeList[static_cast<size_t>(id)]);
 
             // Determine start address of data in EEPROM
             size_t address = getModuleAddress(id);

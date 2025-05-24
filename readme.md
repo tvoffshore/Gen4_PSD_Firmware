@@ -167,11 +167,11 @@ Usage SET: !ADR:MCTR=63\<CR\>
 
 Set/Get the frequency of measurements - frequency with which the data will be sampled and read during measurements, Hz. The minimum value is **1Hz** , the maximum value is **100Hz**.
 
-Default value: 10Hz
+Default value: 40Hz
 
 Usage GET: !ADR:MFRQ?\<CR\>
 
-Usage SET: !ADR:MFRQ=10\<CR\>
+Usage SET: !ADR:MFRQ=40\<CR\>
 
 # **ID 8: MeasureInterval** - Measurements interval
 

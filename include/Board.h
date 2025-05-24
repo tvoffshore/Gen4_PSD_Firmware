@@ -19,9 +19,9 @@
 namespace Board
 {
     // Minimum CPU frequency
-    constexpr static uint32_t cpuFrequencyMinMHz = 10;
+    constexpr uint32_t cpuFrequencyMinMHz = 10;
     // Maximum CPU frequency
-    constexpr static uint32_t cpuFrequencyMaxMHz = 240;
+    constexpr uint32_t cpuFrequencyMaxMHz = 240;
 
     // USB serial interface configuration
     namespace UsbConfig

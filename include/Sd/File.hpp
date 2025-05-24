@@ -65,7 +65,7 @@ namespace SD
      */
     class File
     {
-        constexpr static size_t pathMaxLength = 100; // Maximum length of path to file
+        static constexpr size_t pathMaxLength = 100; // Maximum length of path to file
 
     public:
         /**
