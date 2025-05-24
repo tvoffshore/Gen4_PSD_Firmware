@@ -463,10 +463,9 @@ void VddController::setTargetVoltage(float voltage)
         voltage = voltageMax;
     }
 
-    LOG_DEBUG("Set sensor target voltage to %.1fV", voltage);
-
     if (settings.targetVoltage != voltage)
     {
+        LOG_DEBUG("Update sensor target voltage: %.1fV -> %.1fV", settings.targetVoltage, voltage);
         settings.targetVoltage = voltage;
         Settings::update(settingsId, settings);
     }

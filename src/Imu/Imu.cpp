@@ -268,6 +268,7 @@ bool Imu::setRange(Module module, uint8_t range)
 
         if (settings.accelRange != range)
         {
+            LOG_DEBUG("Update ACCEL range: %u -> %u", settings.accelRange, range);
             settings.accelRange = range;
             Settings::update(settingsId, settings);
         }
@@ -284,6 +285,7 @@ bool Imu::setRange(Module module, uint8_t range)
 
         if (settings.gyroRange != range)
         {
+            LOG_DEBUG("Update GYRO range: %u -> %u", settings.gyroRange, range);
             settings.gyroRange = range;
             Settings::update(settingsId, settings);
         }

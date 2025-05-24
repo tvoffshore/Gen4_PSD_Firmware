@@ -96,8 +96,9 @@ namespace
             serialSelect = static_cast<uint8_t>(SerialSelect::RS232);
         }
 
-        if (serialSelect != settings.serialSelect)
+        if (settings.serialSelect != serialSelect)
         {
+            LOG_DEBUG("Update serial interface selection: %u -> %u", settings.serialSelect, serialSelect);
             settings.serialSelect = serialSelect;
             Settings::update(settingsId, settings);
         }

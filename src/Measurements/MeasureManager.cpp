@@ -344,6 +344,7 @@ namespace
 
         if (settings.psdPoints != psdPoints)
         {
+            LOG_DEBUG("Update PSD points: %u -> %u", settings.psdPoints, psdPoints);
             // Update setting
             settings.psdPoints = psdPoints;
             Settings::update(settingsId, settings);
@@ -374,6 +375,7 @@ namespace
 
         if (settings.psdCutoff != psdCutoff)
         {
+            LOG_DEBUG("Update PSD cutoff: %u -> %u", settings.psdCutoff, psdCutoff);
             // Update setting
             settings.psdCutoff = psdCutoff;
             Settings::update(settingsId, settings);
@@ -400,6 +402,7 @@ namespace
 
         if (settings.dataTypeMask != dataTypeMask)
         {
+            LOG_DEBUG("Update data type: %u -> %u", settings.dataTypeMask, dataTypeMask);
             // Update setting
             settings.dataTypeMask = dataTypeMask;
             Settings::update(settingsId, settings);
@@ -426,6 +429,7 @@ namespace
 
         if (settings.sensorTypeMask != sensorTypeMask)
         {
+            LOG_DEBUG("Update sensor type: %u -> %u", settings.sensorTypeMask, sensorTypeMask);
             // Update setting
             settings.sensorTypeMask = sensorTypeMask;
             Settings::update(settingsId, settings);
@@ -456,6 +460,7 @@ namespace
 
         if (settings.sampleFrequency != sampleFrequency)
         {
+            LOG_DEBUG("Update sampling frequency: %u -> %u", settings.sampleFrequency, sampleFrequency);
             // Update setting
             settings.sampleFrequency = sampleFrequency;
             Settings::update(settingsId, settings);
@@ -466,9 +471,9 @@ namespace
     }
 
     /**
-     * @brief Set measure interval setting
+     * @brief Set measurements interval setting
      *
-     * @param measureInterval New measure interval
+     * @param measureInterval New measurements interval
      * @return true if new setting was set, false otherwise
      */
     bool setMeasureInterval(uint32_t measureInterval)
@@ -482,6 +487,7 @@ namespace
 
         if (settings.measureInterval != measureInterval)
         {
+            LOG_DEBUG("Update measurements interval: %u -> %u", settings.measureInterval, measureInterval);
             // Update setting
             settings.measureInterval = measureInterval;
             Settings::update(settingsId, settings);
@@ -503,6 +509,7 @@ namespace
 
         if (settings.pauseInterval != pauseInterval)
         {
+            LOG_DEBUG("Update pause interval: %u -> %u", settings.pauseInterval, pauseInterval);
             // Update setting
             settings.pauseInterval = pauseInterval;
             Settings::update(settingsId, settings);
@@ -2101,15 +2108,15 @@ void Manager::process()
     EventBits_t events = eventGroup.wait(EventBits::segment0Ready | EventBits::segment1Ready, 0);
     if (events != 0)
     {
+        size_t segmentIndex = (events & EventBits::segment0Ready) ? 0 : 1;
+        processMeasurements(segmentIndex);
+
         // Increment count of ready segments
         context.segmentCount++;
         size_t measureTimeMs = context.segmentCount * context.segmentTimeMs;
 
         float readyPcnt = static_cast<float>(measureTimeMs) / secondsToMillis(settings.measureInterval) * 100;
         LOG_INFO("Segment %d is ready, complete %.1f%%", context.segmentCount, readyPcnt);
-
-        size_t segmentIndex = (events & EventBits::segment0Ready) ? 0 : 1;
-        processMeasurements(segmentIndex);
 
         if (readyPcnt >= completePcnt)
         {
