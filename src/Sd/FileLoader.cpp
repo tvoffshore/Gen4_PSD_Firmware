@@ -95,7 +95,7 @@ namespace
                     int recognized = sscanf(line.c_str(), "%d %ld.bin", &file.size, &file.time);
                     if (recognized == 2)
                     {
-                        if (file.time <= startTime)
+                        if (file.time < startTime)
                         {
                             snprintf(file.path, sizeof(file.path), "%s/%ld.bin", directory, file.time);
                             fileList.push_back(file);
