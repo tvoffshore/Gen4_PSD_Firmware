@@ -813,7 +813,7 @@ namespace
             if (isOpen == true)
             {
                 char string[200] = {0};
-                size_t timeOffsetMs = 0;
+                size_t timeOffsetMs = context.segmentCount * context.segmentTimeMs;
 
                 for (size_t idx = 0; idx < context.segmentSize; idx++)
                 {
