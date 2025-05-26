@@ -2040,7 +2040,7 @@ namespace
                                            {
                                                uint8_t value = atoi(dataString);
                                                bool result = setPsdPoints(value);
-                                               if (result == true && (context.config.dataTypeMask & DataTypeMask::Psd))
+                                               if (result == true)
                                                {
                                                    // Restart measurements if PSD points was changed
                                                    restartMeasurements();

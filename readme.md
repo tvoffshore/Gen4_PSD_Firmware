@@ -39,7 +39,7 @@ Usage SET: !ADR:TIME=203230\<CR\>
 
 Set/Get the PSD points count, which corresponds to the number of calculated bins. The minimum value is **1** , the maximum value is **10**.
 
-**NOTE:** PSD segment size is equal to power of two of PSD points count.
+**NOTE:** PSD segment size is equal to power of two of PSD points count. The current measurements will be restarted when the PSD points count is changed.
 
 Default value: 8
 
@@ -51,8 +51,6 @@ Usage SET: !ADR:PSDP=8\<CR\>
 
 Set/Get PSD cutoff to store the results. It corresponds to the number of stored bins; the rest of the bins will be omitted. The minimum value is **1** , the maximum value is **1024**.
 
-**NOTE:** PSD segment size is equal to power of two of PSD points count.
-
 Default value: 128
 
 Usage GET: !ADR:PSDC?\<CR\>
@@ -63,7 +61,7 @@ Usage SET: !ADR:PSDC=128\<CR\>
 
 Set/Get bitmask each bit of which corresponds to data types capabilities: 0 - disable data type, 1 - enable data type. Enabled data types will be taken/calculated and stored on SD.
 
-**NOTE:** The current measurements will be restarted when data type capabilities are changed.
+**NOTE:** The current measurements will be restarted when the data type capabilities are changed.
 
 The bitmask value is according to the table below:
 
@@ -87,7 +85,7 @@ Usage SET: !ADR:DTYP=7\<CR\>
 
 Set/Get the bitmask each bit of which corresponds to sensors measurement capabilities: 0 - disable sensor, 1 - enable sensor. Enabled sensors will be used for measurements.
 
-**NOTE:** The current measurements will be restarted when measurement capabilities are changed.
+**NOTE:** The current measurements will be restarted when the measurement capabilities are changed.
 
 The bitmask value is according to the table below:
 
@@ -167,6 +165,8 @@ Usage SET: !ADR:MCTR=63\<CR\>
 
 Set/Get the frequency of measurements - frequency with which the data will be sampled and read during measurements, Hz. The minimum value is **1Hz** , the maximum value is **100Hz**.
 
+**NOTE:** The current measurements will be restarted when the measurement frequency is changed.
+
 Default value: 40Hz
 
 Usage GET: !ADR:MFRQ?\<CR\>
@@ -197,6 +197,8 @@ Usage SET: !ADR:PINT=300\<CR\>
 
 Set/Get accelerometer range (G).
 
+**NOTE:** The current measurements will be restarted when the accelerometer range is changed (if the accelerometer or angle or accel_result measurements are enabled by **ID 6: MeasureControl**).
+
 Suitable values are given in the table below:
 
 | Range | Value |
@@ -216,6 +218,8 @@ Usage SET: !ADR:ACRG=0\<CR\>
 
 Set/Get gyroscope range (DPS).
 
+**NOTE:** The current measurements will be restarted when the gyroscope range is changed (if the gyroscope or angle measurements are enabled by **ID 6: MeasureControl**).
+
 Suitable values are given in the table below:
 
 | Range | Value |
@@ -234,7 +238,9 @@ Usage SET: !ADR:GYRG=2\<CR\>
 
 # **ID 12: AdcVoltage** - ADC sensors voltage
 
-Set/Get voltage applied to both ADC sensors. The new voltage level will not be applied after the set command if ADC sensors disabled or sampling is disabled or paused. It will be applied automatically when ADC1 or ADC2 sampling starts OR you can apply it manually with **ID 34: ApplyAdcVoltage** command.
+Set/Get voltage applied to both ADC sensors. The new voltage level will not be applied right after the set command. It will be applied automatically when the ADC1 or ADC2 sensor starts.
+
+**NOTE:** The current measurements will be restarted when the ADC sensors voltage is changed (if the ADC1 or ADC2 measurements are enabled by **ID 6: MeasureControl**).
 
 Default value: 10V
 
@@ -247,6 +253,8 @@ Usage SET: !ADR:VSNS=10\<CR\>
 # **ID 13: GainSelect** - Gain selection configuration for ADC1
 
 Set/Get the gain applied to the input of ADC1 sensor.
+
+**NOTE:** The current measurements will be restarted when the ADC1 sensor gain is changed (if the ADC1 measurements are enabled by **ID 6: MeasureControl**).
 
 Suitable values are given in the table below:
 
@@ -266,6 +274,8 @@ Usage SET: !ADR:GNSL=0\<CR\>
 # **ID 14: InputTypeSelect** - Input type selection configuration for ADC2
 
 Set/Get the input type of the ADC2 sensor.
+
+**NOTE:** The current measurements will be restarted when the ADC2 sensor input type is changed (if the ADC2 measurements are enabled by **ID 6: MeasureControl**).
 
 Suitable values are given in the table below:
 
@@ -324,12 +334,12 @@ Usage SET: !ADR:LOGL=Value\<CR\>
 
 # **ID 17: BatteryStatus** - Battery status
 
-Get the battery status (voltage in millivolts, level in percents).
+Get the battery status. The status contains battery voltage in millivolts and battery level in percent.
 
 Usage GET: !ADR:BATT?\<CR\>
 
 # **ID 18: FwVersion** - Firmware version information
 
-Get the firmware version information. The information consists of major and minor versions.
+Get the firmware version information. The information contains major and minor version parts.
 
 Usage GET: !ADR:FVER?\<CR\>
