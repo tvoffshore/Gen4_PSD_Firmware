@@ -1,8 +1,8 @@
 /**
  * @file Rtc.hpp
  * @author Mikhail Kalina (apollo.mk58@gmail.com)
- * @brief Real time clock API
- * @version 0.2
+ * @brief Real time clock module RV-8263-C7 API
+ * @version 0.1
  * @date 2025-05-15
  *
  * @copyright Copyright (c) 2025

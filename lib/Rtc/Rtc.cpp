@@ -1,7 +1,7 @@
 /**
  * @file Rtc.cpp
  * @author Mikhail Kalina (apollo.mk58@gmail.com)
- * @brief Real time clock implementation
+ * @brief Real time clock module RV-8263-C7 implementation
  * @version 0.1
  * @date 2025-05-15
  *
