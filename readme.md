@@ -296,7 +296,7 @@ Usage SET: !ADR:ITSL=2\<CR\>
 
 Set/Get the serial interface selected for serial commands handling.
 
-**NOTE:** The serial interface will be selected immediately and the previous interface will become unavailable. USB interface is always available to control the device the same way as RS232/RS485 but with log messages sprinkled in command responses. To remove unnecessary log messages from the text the desired log level may be set with **ID 10: LogLevel** (0 to turn off log messages at all).
+**NOTE:** The serial interface will be selected immediately and the previous interface will become unavailable. USB interface is always available to control the device the same way as RS232/RS485 but with log messages sprinkled in command responses. To remove unnecessary log messages from the text the desired log level may be set with **ID 20: LogLevel** (0 to turn off log messages at all).
 
 Suitable values are given in the table below:
 
@@ -311,7 +311,73 @@ Usage GET: !ADR:SERS?\<CR\>
 
 Usage SET: !ADR:SERS=0\<CR\>
 
-# **ID 16: LogLevel** - Log messages level configuration
+# **ID 16: BacklightState** - Set LCD backlight state
+
+Set/Get LCD display backlight state: 0 - OFF, 1 - ON. You also can set backlight level with **ID 17: BacklightLevel** command.
+
+Default value: 1
+
+Usage GET: !ADR:BLST?\<CR\>
+
+Usage SET: !ADR:BLST=1\<CR\>
+
+# **ID 17: BacklightLevel** - Set LCD backlight level
+
+Set/Get LCD display backlight level in percentage. You also can activate/deactivate backlight with **ID 16: BacklightState** command.
+
+Range: 0-255
+
+Default value: 255
+
+Usage GET: !ADR:BLLV?\<CR\>
+
+Usage SET: !ADR:BLLV=255\<CR\>
+
+# **ID 18: DisplayOnSource** - Display activation sources setup
+
+Set/Get the sources that activate the display after sleep. The sources to wake the board can be configured with **ID 19: WakeUpSource** command.
+
+The bitmask value is according to the table below:
+
+| | Bit 2 | Bit 1 | Bit 0 | Value |
+| --- | --- | --- | --- | --- |
+| Light | | | X | 1 |
+| Serial | | X | | 2 |
+| Serial + Light | | X | X | 3 |
+| Timer | X | | | 4 |
+| Timer + Light | X | | X | 5 |
+| Timer + Serial | X | X | | 6 |
+| Timer + Serial + Light | X | X | X | 7 |
+
+Default value: 7
+
+Usage GET: !ADR:DWSR?\<CR\>
+
+Usage SET: !ADR:DWSR=7\<CR\>
+
+# **ID 19: WakeUpSource** - Wake up sources setup
+
+Set/Get the sources to wake up the board from sleep.
+
+The bitmask value is according to the table below:
+
+| | Bit 2 | Bit 1 | Bit 0 | Value |
+| --- | --- | --- | --- | --- |
+| Light | | | X | 1 |
+| Serial | | X | | 2 |
+| Serial + Light | | X | X | 3 |
+| Timer | X | | | 4 |
+| Timer + Light | X | | X | 5 |
+| Timer + Serial | X | X | | 6 |
+| Timer + Serial + Light | X | X | X | 7 |
+
+Default value: 7
+
+Usage GET: !ADR:WSRC?\<CR\>
+
+Usage SET: !ADR:WSRC=7\<CR\>
+
+# **ID 20: LogLevel** - Log messages level configuration
 
 Set/Get the maximum desired log messages level. The messages with level below this setting (higher value) will be hidden.
 
@@ -332,13 +398,13 @@ Usage GET: !ADR:LOGL?\<CR\>
 
 Usage SET: !ADR:LOGL=Value\<CR\>
 
-# **ID 17: BatteryStatus** - Battery status
+# **ID 21: BatteryStatus** - Battery status
 
 Get the battery status. The status contains battery voltage in millivolts and battery level in percent.
 
 Usage GET: !ADR:BATT?\<CR\>
 
-# **ID 18: FwVersion** - Firmware version information
+# **ID 22: FwVersion** - Firmware version information
 
 Get the firmware version information. The information contains major and minor version parts.
 

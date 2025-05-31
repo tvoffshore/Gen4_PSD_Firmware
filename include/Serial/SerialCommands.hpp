@@ -46,15 +46,18 @@ namespace Serials
         GainSelect,       // 13: Set/Get gain selection for ADC1 sensor
         InputTypeSelect,  // 14: Set/Get input type selection for ADC2 sensor
         SerialSelect,     // 15: Set/Get serial interface selection
-        WakeUpSource,     // 16: Set/Get the sources to wake up from sleep
-        LogLevel,         // 17: Set/Get log messages level
-        BatteryStatus,    // 18: Get battery status
-        FwVersion,        // 19: Get FW version information
-        DownloadRecent,   // 20: Set download range starting from now
-        DownloadHistory,  // 21: Set download range starting from timestamp
-        DownloadType,     // 22: Set download data type
-        DownloadSize,     // 23: Get download data size in bytes
-        DownloadData,     // 24: Get download data
+        BacklightState,   // 16: Set/Get display backlight state
+        BacklightLevel,   // 17: Set/Get display backlight level
+        DisplayOnSource,  // 18: Set/Get the sources that activate the display after sleep
+        WakeUpSource,     // 19: Set/Get the sources to wake up the board from sleep
+        LogLevel,         // 20: Set/Get log messages level
+        BatteryStatus,    // 21: Get battery status
+        FwVersion,        // 22: Get FW version information
+        DownloadRecent,   // 23: Set download range starting from now
+        DownloadHistory,  // 24: Set download range starting from timestamp
+        DownloadType,     // 25: Set download data type
+        DownloadSize,     // 26: Get download data size in bytes
+        DownloadData,     // 27: Get download data
 
         Commands // Total number of serial commands
     };
@@ -149,6 +152,21 @@ namespace Serials
         {
             .id = CommandId::SerialSelect,
             .string = "SERS",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::BacklightState,
+            .string = "BLST",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::BacklightLevel,
+            .string = "BLLV",
+            .accessMask = AccessMask::read | AccessMask::write,
+        },
+        {
+            .id = CommandId::DisplayOnSource,
+            .string = "DWSR",
             .accessMask = AccessMask::read | AccessMask::write,
         },
         {

@@ -2094,14 +2094,24 @@ namespace
                                            [](const char *dataString)
                                            {
                                                uint32_t value = atoi(dataString);
-                                               setMeasureInterval(value);
+                                               bool result = setMeasureInterval(value);
+                                               if (result == true)
+                                               {
+                                                   // Change current context right away
+                                                   context.config.measureInterval = settings.measureInterval;
+                                               }
                                            });
 
         Serials::Manager::subscribeToWrite(Serials::CommandId::PauseInterval,
                                            [](const char *dataString)
                                            {
                                                uint32_t value = atoi(dataString);
-                                               setPauseInterval(value);
+                                               bool result = setPauseInterval(value);
+                                               if (result == true)
+                                               {
+                                                   // Change current context right away
+                                                   context.config.pauseInterval = settings.pauseInterval;
+                                               }
                                            });
 
         Serials::Manager::subscribeToWrite(Serials::CommandId::AccelRange,
