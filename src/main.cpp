@@ -57,6 +57,14 @@ void registerSerialReadHandlers()
                                           *responseString = dataString;
                                       });
 
+    Serials::Manager::subscribeToRead(Serials::CommandId::WakeUpSource,
+                                      [](const char **responseString)
+                                      {
+                                          uint8_t wakeUpSources = Power::wakeUpSources();
+                                          snprintf(dataString, sizeof(dataString), "%u", wakeUpSources);
+                                          *responseString = dataString;
+                                      });
+
     Serials::Manager::subscribeToRead(Serials::CommandId::LogLevel,
                                       [](const char **responseString)
                                       {
@@ -106,6 +114,13 @@ void registerSerialWriteHandlers()
                                            SystemTime::setStringTime(timeString);
                                        });
 
+    Serials::Manager::subscribeToWrite(Serials::CommandId::WakeUpSource,
+                                       [](const char *dataString)
+                                       {
+                                           uint8_t wakeUpSources = atoi(dataString);
+                                           Power::setWakeUpSources(wakeUpSources);
+                                       });
+
     Serials::Manager::subscribeToWrite(Serials::CommandId::LogLevel,
                                        [](const char *dataString)
                                        {
@@ -122,9 +137,6 @@ void setup()
     // Setup the board first
     Board::setup();
 
-    // Set CPU frequency to the minimum possible
-    Power::setCpuFrequency(Power::cpuFrequencyMinMHz);
-
     Power::WakeUpReason wakeUpReason = Power::getWakeUpReason();
     LOG_INFO("Wake up reason: %s", Power::wakeUpReasonToString(wakeUpReason));
 
@@ -135,6 +147,11 @@ void setup()
 
     // Initialize the log module
     Log::initialize();
+
+    // Initialize Power module
+    Power::initialize();
+    // Set CPU frequency to the minimum possible
+    Power::setCpuFrequency(Power::cpuFrequencyMinMHz);
 
     // Initialize battery reading
     Battery::initialize();

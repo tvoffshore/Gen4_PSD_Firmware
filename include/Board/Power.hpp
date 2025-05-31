@@ -21,17 +21,6 @@ namespace Power
     constexpr uint32_t cpuFrequencyMaxMHz = 240;
 
     /**
-     * @brief Wake up sources
-     */
-    namespace WakeUpSource
-    {
-        constexpr uint8_t Light = (1 << 0);             // 1: Wake up on light sensor
-        constexpr uint8_t Serial = (1 << 1);            // 2: Wake up on read measurements serial commands received
-        constexpr uint8_t Timer = (1 << 2);             // 4: Wake up timer with specified frequency
-        constexpr uint8_t All = Light | Serial | Timer; // 7: All wake up sources
-    }; // namespace WakeUpSource
-
-    /**
      * @brief Wake up reasons
      */
     enum class WakeUpReason
@@ -71,6 +60,25 @@ namespace Power
     const char *sleepModeToString(SleepMode mode);
 
     /**
+     * @brief Initialize Power module
+     */
+    void initialize();
+
+    /**
+     * @brief Get current sources to wake up from sleep, bitmask
+     *
+     * @return Current wake up sources
+     */
+    uint8_t wakeUpSources();
+
+    /**
+     * @brief Set new sources to wake up from sleep, bitmask
+     *
+     * @param sources New wake up sources
+     */
+    void setWakeUpSources(uint8_t wakeUpSources);
+
+    /**
      * @brief Set CPU frequency
      *
      * @param frequencyMHz New frequency (10MHz min, 240MHz max)
@@ -81,11 +89,10 @@ namespace Power
      * @brief Goes into sleep mode and wait wake up events
      *
      * @param sleepDuration Time to sleep (ignored if Timer wake source isn't set), seconds
-     * @param wakeUpSources Mask with the wake up sources
      * @param sleepMode Sleep mode to move into
      * @return Reason of waking up
      */
-    WakeUpReason sleep(uint32_t sleepDuration, uint8_t wakeUpSources, SleepMode sleepMode = SleepMode::DeepSleep);
+    WakeUpReason sleep(uint32_t sleepDuration, SleepMode sleepMode = SleepMode::DeepSleep);
 
     /**
      * @brief Return the reason by which board has been awakened from sleep

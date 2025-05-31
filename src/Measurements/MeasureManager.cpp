@@ -2273,7 +2273,7 @@ void Manager::process()
 
                 SD::FS::stop();
 
-                Power::sleep(context.config.pauseInterval, Power::WakeUpSource::All);
+                Power::sleep(context.config.pauseInterval);
             }
             else
             {

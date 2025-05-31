@@ -32,6 +32,7 @@ namespace Settings
         InputSelector, // InputSelector settings id
         VddController, // VddController settings id
         LogModule,     // LogModule settings id
+        PowerModule,   // PowerModule settings id
 
         Count // Total count of settings modules
     };
@@ -45,6 +46,7 @@ namespace Settings
         2,  // InputSelector (uint8_t + CRC8) = 2
         5,  // VddController (float + CRC8) = 5
         2,  // LogModule (uint8_t + CRC8) = 2
+        2,  // PowerModule (uint8_t + CRC8) = 2
     };
     static_assert(sizeof(settingsSizeList) / sizeof(*settingsSizeList) == static_cast<size_t>(Settings::Id::Count),
                   "Settings size list doesn't match to modules count!");

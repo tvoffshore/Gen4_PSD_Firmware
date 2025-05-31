@@ -19,6 +19,7 @@
 #include <driver/rtc_io.h>
 
 #include <Log.hpp>
+#include <Settings.hpp>
 
 #include "Board/Board.hpp"
 #include "Serial/Interfaces/Max3221.hpp"
@@ -31,6 +32,17 @@ namespace
     constexpr auto pinPhotoDiode = GPIO_NUM_7;
 
     /**
+     * @brief Wake up sources
+     */
+    namespace WakeUpSource
+    {
+        constexpr uint8_t Light = (1 << 0);             // 1: Wake up on light sensor
+        constexpr uint8_t Serial = (1 << 1);            // 2: Wake up on read measurements serial commands received
+        constexpr uint8_t Timer = (1 << 2);             // 4: Wake up timer with specified frequency
+        constexpr uint8_t All = Light | Serial | Timer; // 7: All wake up sources
+    }; // namespace WakeUpSource
+
+    /**
      * @brief Convert seconds to microseconds
      *
      * @param seconds Time in seconds
@@ -40,6 +52,24 @@ namespace
     {
         return static_cast<uint64_t>(seconds) * 1000 * 1000;
     }
+
+    // Default sources to wake up from sleep, bitmask
+    constexpr uint8_t wakeUpSourcesDefault = WakeUpSource::All;
+    // Settings identifier in internal storage
+    constexpr auto settingsId = Settings::Id::PowerModule;
+
+#pragma pack(push, 1)
+    /**
+     * @brief Non volatile settings structure for log module
+     */
+    struct PowerSettings
+    {
+        uint8_t wakeUpSources; // Sources to wake up from sleep, bitmask
+    };
+#pragma pack(pop)
+
+    // Settings for log module
+    PowerSettings settings = {.wakeUpSources = wakeUpSourcesDefault};
 } // namespace
 
 /**
@@ -82,6 +112,39 @@ const char *Power::sleepModeToString(SleepMode mode)
 }
 
 /**
+ * @brief Initialize Power module
+ */
+void Power::initialize()
+{
+    Settings::read(settingsId, settings);
+}
+
+/**
+ * @brief Get current sources to wake up from sleep, bitmask
+ *
+ * @return Current wake up sources
+ */
+uint8_t Power::wakeUpSources()
+{
+    return settings.wakeUpSources;
+}
+
+/**
+ * @brief Set new sources to wake up from sleep, bitmask
+ *
+ * @param wakeUpSources New wake up sources
+ */
+void Power::setWakeUpSources(uint8_t wakeUpSources)
+{
+    if (settings.wakeUpSources != wakeUpSources)
+    {
+        LOG_INFO("Set new wake up sources: %u -> %u", settings.wakeUpSources, wakeUpSources);
+        settings.wakeUpSources = wakeUpSources;
+        Settings::update(settingsId, settings);
+    }
+}
+
+/**
  * @brief Set CPU frequency
  *
  * @param frequencyMHz New frequency (10MHz min, 240MHz max)
@@ -105,25 +168,24 @@ void Power::setCpuFrequency(uint32_t frequencyMHz)
  * @brief Goes into sleep mode and wait wake up events
  *
  * @param sleepDuration Time to sleep (ignored if Timer wake source isn't set), seconds
- * @param wakeUpSources Mask with the wake up sources
  * @param sleepMode Sleep mode to move into
  * @return Reason of waking up
  */
-WakeUpReason Power::sleep(uint32_t sleepDuration, uint8_t wakeUpSources, SleepMode sleepMode)
+WakeUpReason Power::sleep(uint32_t sleepDuration, SleepMode sleepMode)
 {
     LOG_INFO("Entering into %s sleep mode", sleepModeToString(sleepMode));
 
-    if (wakeUpSources & WakeUpSource::Light)
+    if (settings.wakeUpSources & WakeUpSource::Light)
     {
         esp_sleep_enable_ext1_wakeup(1 << pinPhotoDiode, ESP_EXT1_WAKEUP_ANY_HIGH);
     }
 
-    if (wakeUpSources & WakeUpSource::Serial)
+    if (settings.wakeUpSources & WakeUpSource::Serial)
     {
         esp_sleep_enable_ext0_wakeup(Serials::Max3221::pinRx, LOW);
     }
 
-    if ((wakeUpSources & WakeUpSource::Timer) && sleepDuration > 0)
+    if ((settings.wakeUpSources & WakeUpSource::Timer) && sleepDuration > 0)
     {
         LOG_INFO("Wake up in %u sec", sleepDuration);
 
@@ -151,13 +213,13 @@ WakeUpReason Power::sleep(uint32_t sleepDuration, uint8_t wakeUpSources, SleepMo
     WakeUpReason wakeUpReason = getWakeUpReason();
     LOG_INFO("Wake up reason: %s", wakeUpReasonToString(wakeUpReason));
 
-    if (wakeUpSources & WakeUpSource::Light)
+    if (settings.wakeUpSources & WakeUpSource::Light)
     {
         // Release the Light pin
         rtc_gpio_deinit(pinPhotoDiode);
     }
 
-    if (wakeUpSources & WakeUpSource::Serial)
+    if (settings.wakeUpSources & WakeUpSource::Serial)
     {
         // Release the Rx pin
         rtc_gpio_deinit(Serials::Max3221::pinRx);
