@@ -18,11 +18,6 @@
 
 namespace Board
 {
-    // Minimum CPU frequency
-    constexpr uint32_t cpuFrequencyMinMHz = 10;
-    // Maximum CPU frequency
-    constexpr uint32_t cpuFrequencyMaxMHz = 240;
-
     // USB serial interface configuration
     namespace UsbConfig
     {
@@ -79,13 +74,6 @@ namespace Board
     void setupLED();
 
     /**
-     * @brief Set CPU frequency
-     *
-     * @param frequencyMHz New frequency (10MHz min, 240MHz max)
-     */
-    void setCpuFrequency(uint32_t frequencyMHz);
-
-    /**
      * @brief Setup board power
      */
     void powerUp();
@@ -96,10 +84,12 @@ namespace Board
     void powerDown();
 
     /**
-     * @brief Goes into deep sleep mode and wait wake up events
-     * @warning This function never returns
-     *
-     * @param sleepDuration Time to sleep, seconds
+     * @brief Enable gpio pad hold function for particular pins that need to keep their states
      */
-    void deepSleep(size_t sleepDuration);
+    void holdPins();
+
+    /**
+     * @brief Disable gpio pad hold function for particular pins that need to change their states
+     */
+    void releasePins();
 } // namespace Power

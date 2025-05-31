@@ -9,7 +9,7 @@
  *
  */
 
-#include "Board.h"
+#include "Board/Board.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -29,22 +29,8 @@ using namespace Board;
 
 namespace
 {
-    // Photo diode pin (ADC_1_CH6)
-    constexpr auto pinPhotoDiode = GPIO_NUM_7;
-
     // Max time to wait LoRa is ready
     constexpr size_t loraReadyWaitTimeMs = 1000;
-
-    /**
-     * @brief Convert seconds to microseconds
-     *
-     * @param seconds Time in seconds
-     * @return Microseconds
-     */
-    constexpr uint64_t secondsToMicros(size_t seconds)
-    {
-        return seconds * 1000 * 1000;
-    }
 
     /**
      * @brief Move LoRa chip into sleep mode
@@ -98,46 +84,6 @@ namespace
         SPI.end();
         pinMode(LoRa_NSS, INPUT);
     }
-
-    /**
-     * @brief Enable gpio pad hold function for particular pins that need to keep their states
-     */
-    void holdPinsDeepSleep()
-    {
-        // Workaround to keep UART TX HIGH +3.3V (RS232 DOUT LOW -5V) while ESP is in deep sleep
-        gpio_hold_en(Serials::Max3221::pinTx);
-
-        // Workaround to keep RS232 RX state ENABLED to wake up on serial command while ESP is in deep sleep
-        gpio_hold_en(Serials::Max3221::pinRxEnable);
-
-        // Workaround to keep RS485 RX state ENABLED to wake up on serial command while ESP is in deep sleep
-        gpio_hold_en(Serials::St3485::pinRxEnable);
-        // Workaround to keep RS485 TX state DISABLED while ESP is in deep sleep
-        gpio_hold_en(Serials::St3485::pinTxEnable);
-
-        // Workaround to keep LoRa reset pin HIGH while ESP is in deep sleep (not to restart LoRa occasionally)
-        gpio_hold_en(static_cast<gpio_num_t>(LoRa_RST));
-    }
-
-    /**
-     * @brief Disable gpio pad hold function for particular pins that need to change their states
-     */
-    void releasePinsDeepSleep()
-    {
-        // Release RS232 TX enable pin after deep sleep
-        gpio_hold_dis(Serials::Max3221::pinTx);
-
-        // Release RS232 RX enable pin after deep sleep
-        gpio_hold_dis(Serials::Max3221::pinRxEnable);
-
-        // Release RS485 RX enable pin after deep sleep
-        gpio_hold_dis(Serials::St3485::pinRxEnable);
-        // Release RS485 TX enable pin after deep sleep
-        gpio_hold_dis(Serials::St3485::pinTxEnable);
-
-        // Release LoRa reset pin after deep sleep
-        gpio_hold_dis(static_cast<gpio_num_t>(LoRa_RST));
-    }
 } // namespace
 
 /**
@@ -145,13 +91,13 @@ namespace
  */
 void Board::setup()
 {
+    // Disable the pin hold function to have a chance to change their states
+    releasePins();
+
     // Setup USB serial port for log messages
     setupUSB();
 
     LOG_DEBUG("Setup board...");
-
-    // Disable the pin hold function to have a chance to change their states
-    releasePinsDeepSleep();
 
     // Set LoRa chip into sleep mode
     moveLoraToSleep();
@@ -217,26 +163,6 @@ void Board::setupLED()
 }
 
 /**
- * @brief Set CPU frequency
- *
- * @param frequencyMHz New frequency (10MHz min, 240MHz max)
- */
-void Board::setCpuFrequency(uint32_t frequencyMHz)
-{
-    if (frequencyMHz < cpuFrequencyMinMHz)
-    {
-        frequencyMHz = cpuFrequencyMinMHz;
-    }
-    if (frequencyMHz > cpuFrequencyMaxMHz)
-    {
-        frequencyMHz = cpuFrequencyMaxMHz;
-    }
-
-    setCpuFrequencyMhz(frequencyMHz);
-    LOG_DEBUG("CPU frequency: %u MHz", getCpuFrequencyMhz());
-}
-
-/**
  * @brief Setup board power
  */
 void Board::powerUp()
@@ -256,25 +182,41 @@ void Board::powerDown()
 }
 
 /**
- * @brief Goes into deep sleep mode and wait wake up events
- * @warning This function never returns
- *
- * @param sleepDuration Time to sleep, seconds
+ * @brief Enable gpio pad hold function for particular pins that need to keep their states
  */
-void Board::deepSleep(size_t sleepDuration)
+void Board::holdPins()
 {
-    LOG_INFO("Entering into sleep mode, wake up in %u seconds", sleepDuration);
+    // Workaround to keep UART TX HIGH +3.3V (RS232 DOUT LOW -5V) while ESP is in deep sleep
+    gpio_hold_en(Serials::Max3221::pinTx);
 
-    esp_sleep_enable_ext1_wakeup(1 << pinPhotoDiode, ESP_EXT1_WAKEUP_ANY_HIGH);
-    esp_sleep_enable_ext0_wakeup(Serials::Max3221::pinRx, LOW);
-    esp_sleep_enable_timer_wakeup(secondsToMicros(sleepDuration));
+    // Workaround to keep RS232 RX state ENABLED to wake up on serial command while ESP is in deep sleep
+    gpio_hold_en(Serials::Max3221::pinRxEnable);
 
-    // Power down the board
-    powerDown();
+    // Workaround to keep RS485 RX state ENABLED to wake up on serial command while ESP is in deep sleep
+    gpio_hold_en(Serials::St3485::pinRxEnable);
+    // Workaround to keep RS485 TX state DISABLED while ESP is in deep sleep
+    gpio_hold_en(Serials::St3485::pinTxEnable);
 
-    // Hold gpio pins
-    holdPinsDeepSleep();
+    // Workaround to keep LoRa reset pin HIGH while ESP is in deep sleep (not to restart LoRa occasionally)
+    gpio_hold_en(static_cast<gpio_num_t>(LoRa_RST));
+}
 
-    esp_deep_sleep_start();
-    // Never reachable
+/**
+ * @brief Disable gpio pad hold function for particular pins that need to change their states
+ */
+void Board::releasePins()
+{
+    // Release RS232 TX enable pin after deep sleep
+    gpio_hold_dis(Serials::Max3221::pinTx);
+
+    // Release RS232 RX enable pin after deep sleep
+    gpio_hold_dis(Serials::Max3221::pinRxEnable);
+
+    // Release RS485 RX enable pin after deep sleep
+    gpio_hold_dis(Serials::St3485::pinRxEnable);
+    // Release RS485 TX enable pin after deep sleep
+    gpio_hold_dis(Serials::St3485::pinTxEnable);
+
+    // Release LoRa reset pin after deep sleep
+    gpio_hold_dis(static_cast<gpio_num_t>(LoRa_RST));
 }

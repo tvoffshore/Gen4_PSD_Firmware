@@ -15,8 +15,9 @@
 #include <SystemTime.hpp>
 
 // Source headers
-#include "Battery.hpp"
-#include "Board.h"
+#include "Board/Battery.hpp"
+#include "Board/Board.hpp"
+#include "Board/Power.hpp"
 #include "FwVersion.hpp"
 #include "Measurements/MeasureManager.h"
 #include "Sd/File.hpp"
@@ -120,8 +121,12 @@ void setup()
 {
     // Setup the board first
     Board::setup();
+
     // Set CPU frequency to the minimum possible
-    Board::setCpuFrequency(Board::cpuFrequencyMinMHz);
+    Power::setCpuFrequency(Power::cpuFrequencyMinMHz);
+
+    Power::WakeUpReason wakeUpReason = Power::getWakeUpReason();
+    LOG_INFO("Wake up reason: %s", Power::wakeUpReasonToString(wakeUpReason));
 
     LOG_INFO("Application started, version %s", FwVersion::getVersionString());
 

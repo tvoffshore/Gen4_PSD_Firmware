@@ -28,8 +28,8 @@
 #include "Analog/InputSelector.hpp"
 #include "Analog/Sensor.hpp"
 #include "Analog/VddController.hpp"
-#include "Battery.hpp"
-#include "Board.h"
+#include "Board/Battery.hpp"
+#include "Board/Power.hpp"
 #include "FwVersion.hpp"
 #include "Imu/Imu.hpp"
 #include "IoExpander/IoExpander.hpp"
@@ -726,7 +726,7 @@ namespace
         }
 
         // Set CPU frequency to the maximum possible
-        Board::setCpuFrequency(Board::cpuFrequencyMaxMHz);
+        Power::setCpuFrequency(Power::cpuFrequencyMaxMHz);
 
         const uint16_t *pSamplesAdc1 = &buffer.adc1[offset];
         const uint16_t *pSamplesAdc2 = &buffer.adc2[offset];
@@ -932,7 +932,7 @@ namespace
         }
 
         // Set CPU frequency to the minimum possible
-        Board::setCpuFrequency(Board::cpuFrequencyMinMHz);
+        Power::setCpuFrequency(Power::cpuFrequencyMinMHz);
     }
 
     /**
@@ -1026,7 +1026,7 @@ namespace
         const float *resultPsdAccResult = nullptr;
 
         // Set CPU frequency to the maximum possible
-        Board::setCpuFrequency(Board::cpuFrequencyMaxMHz);
+        Power::setCpuFrequency(Power::cpuFrequencyMaxMHz);
 
         SystemTime::epochToTimestamp(context.startEpochTime, dateTimeString);
         Battery::Status batteryStatus = Battery::readStatus();
@@ -1659,7 +1659,7 @@ namespace
         }
 
         // Set CPU frequency to the minimum possible
-        Board::setCpuFrequency(Board::cpuFrequencyMinMHz);
+        Power::setCpuFrequency(Power::cpuFrequencyMinMHz);
     }
 
     /**
@@ -2273,7 +2273,7 @@ void Manager::process()
 
                 SD::FS::stop();
 
-                Board::deepSleep(context.config.pauseInterval);
+                Power::sleep(context.config.pauseInterval, Power::WakeUpSource::All);
             }
             else
             {

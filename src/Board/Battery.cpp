@@ -9,13 +9,13 @@
  *
  */
 
-#include "Battery.hpp"
+#include "Board/Battery.hpp"
 
 #include <stddef.h>
 
 #include <Log.hpp>
 
-#include "Board.h"
+#include "Board/Board.hpp"
 
 using namespace Battery;
 
