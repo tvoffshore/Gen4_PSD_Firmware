@@ -188,6 +188,9 @@ void setup()
     }
 
     FileLoader::initialize();
+
+    int coreID = xPortGetCoreID();
+    LOG_DEBUG("Main task start on core #%d", coreID);
 }
 
 /**

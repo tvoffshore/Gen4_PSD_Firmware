@@ -93,7 +93,7 @@ namespace
     constexpr uint16_t psdCutoffMax = 1024;
 
     // Default data type to calculate and store on SD
-    constexpr uint8_t dataTypeMaskDefault = DataTypeMask::All;
+    constexpr uint8_t dataTypeMaskDefault = DataTypeMask::Psd | DataTypeMask::Statistic;
     // Default sensor type for measurements
     constexpr uint8_t sensorTypeMaskDefault = SensorTypeMask::All;
 
@@ -287,7 +287,6 @@ namespace
     void processMeasurements(size_t index);
     void calculateAccelResult(const int16_t *pAccX, float meanAccX, const int16_t *pAccY, float meanAccY, size_t length);
     void saveMeasurements();
-    void resetStatistics();
 
     // Sampling process functions
     bool enableSensors();
@@ -568,12 +567,6 @@ namespace
     {
         context.setup(settings);
 
-        if (context.config.sensorTypeMask & SensorTypeMask::Angle)
-        {
-            // Setup madgwick's IMU and AHRS filter
-            madgwickFilter.begin(context.config.sampleFrequency);
-        }
-
         if (context.config.dataTypeMask & DataTypeMask::Psd)
         {
             // Setup PSD measurements
@@ -601,8 +594,39 @@ namespace
             }
         }
 
-        // Reset measurements statistic
-        resetStatistics();
+        if (context.config.dataTypeMask & DataTypeMask::Statistic)
+        {
+            // Reset measurements statistic
+            if (context.config.sensorTypeMask & SensorTypeMask::Adc1)
+            {
+                statisticAdc1.reset();
+            }
+            if (context.config.sensorTypeMask & SensorTypeMask::Adc2)
+            {
+                statisticAdc2.reset();
+            }
+            if (context.config.sensorTypeMask & SensorTypeMask::Accel)
+            {
+                statisticAccX.reset();
+                statisticAccY.reset();
+                statisticAccZ.reset();
+            }
+            if (context.config.sensorTypeMask & SensorTypeMask::Gyro)
+            {
+                statisticGyroX.reset();
+                statisticGyroY.reset();
+                statisticGyroZ.reset();
+            }
+            if (context.config.sensorTypeMask & SensorTypeMask::Angle)
+            {
+                statisticRoll.reset();
+                statisticPitch.reset();
+            }
+            if (context.config.sensorTypeMask & SensorTypeMask::AccelResult)
+            {
+                statisticAccResult.reset();
+            }
+        }
 
         if (context.config.dataTypeMask & DataTypeMask::Raw)
         {
@@ -1663,45 +1687,6 @@ namespace
     }
 
     /**
-     * @brief Reset measurements statistic
-     */
-    void resetStatistics()
-    {
-        if (context.config.dataTypeMask & DataTypeMask::Statistic)
-        {
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc1)
-            {
-                statisticAdc1.reset();
-            }
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc2)
-            {
-                statisticAdc2.reset();
-            }
-            if (context.config.sensorTypeMask & SensorTypeMask::Accel)
-            {
-                statisticAccX.reset();
-                statisticAccY.reset();
-                statisticAccZ.reset();
-            }
-            if (context.config.sensorTypeMask & SensorTypeMask::Gyro)
-            {
-                statisticGyroX.reset();
-                statisticGyroY.reset();
-                statisticGyroZ.reset();
-            }
-            if (context.config.sensorTypeMask & SensorTypeMask::Angle)
-            {
-                statisticRoll.reset();
-                statisticPitch.reset();
-            }
-            if (context.config.sensorTypeMask & SensorTypeMask::AccelResult)
-            {
-                statisticAccResult.reset();
-            }
-        }
-    }
-
-    /**
      * @brief Start sensors readings
      *
      * @return true if sensors are started successfully, false otherwsie
@@ -1750,6 +1735,12 @@ namespace
                 return false;
             }
             LOG_INFO("Gyroscope started");
+        }
+
+        if (context.config.sensorTypeMask & SensorTypeMask::Angle)
+        {
+            // Setup madgwick's IMU and AHRS filter
+            madgwickFilter.begin(context.config.sampleFrequency);
         }
 
         return result;
@@ -1861,6 +1852,9 @@ namespace
         TickType_t xLastWakeTime;
 
         (void *)pvParameters; // unused
+
+        int coreID = xPortGetCoreID();
+        LOG_DEBUG("Samling task start on core #%d", coreID);
 
         while (1)
         {
@@ -2270,7 +2264,8 @@ void Manager::process()
 
         if (readyPcnt >= completePcnt)
         {
-            context.segmentCount = 0;
+            // Stop sensors sampling
+            stopSampling();
 
             // Save measurements to the storage
             saveMeasurements();
@@ -2278,17 +2273,14 @@ void Manager::process()
             // Check if board should go to sleep during pause interval
             if (context.config.pauseInterval > 0)
             {
-                // Stop sensors sampling
-                stopSampling();
-
                 SD::FS::stop();
 
                 Power::sleep(context.config.pauseInterval);
             }
             else
             {
-                // Reset measurements statistic
-                resetStatistics();
+                // Start the measurements process
+                startMeasurements();
             }
         }
     }
