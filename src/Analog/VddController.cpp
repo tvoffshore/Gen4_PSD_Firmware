@@ -95,7 +95,7 @@ namespace
         bool result = IoExpander::setPin(IoExpander::Pin::DCDC_EN);
         if (result == true)
         {
-            LOG_INFO("DCDC is enabled");
+            LOG_DEBUG("DCDC is enabled");
         }
 
         return result;
@@ -359,7 +359,7 @@ bool VddController::cutOffVoltage()
     bool result = IoExpander::resetPin(IoExpander::Pin::DCDC_EN);
     if (result == true)
     {
-        LOG_INFO("DCDC is disabled");
+        LOG_DEBUG("DCDC is disabled");
     }
 
     return result;

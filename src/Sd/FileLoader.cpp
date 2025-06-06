@@ -47,7 +47,7 @@ namespace
     struct BinPacket
     {
         BinHeader header;
-        char buffer[2048];
+        char buffer[5120];
     };
 #pragma pack(pop)
 
@@ -61,35 +61,31 @@ namespace
     int endFileId = 0;
     std::vector<FileInfo> downloadList;
     BinPacket binPacket = {.header = {.magic = 0xFEDCBA98}};
-    char downloadBuffer[2048];
 
     int getDownloadSize()
     {
-        std::vector<FileInfo> fileList;
-        int size = 0;
+        int downloadSize = 0;
         downloadList.clear();
 
         if (sensorType < Measurements::SensorType::Count &&
             dataType < Measurements::DataType::Count &&
             startTime > 0 && endFileId >= startFileId)
         {
-            SystemTime::epochToTimestamp(startTime, startTimeString);
             char directory[30];
-            snprintf(directory, sizeof(directory), "BIN/%s/%.8s",
-                     Measurements::getDirectory(sensorType, dataType), startTimeString);
+            const char *sensorDataDir = Measurements::getDirectory(sensorType, dataType);
+
+            SystemTime::epochToTimestamp(startTime, startTimeString);
+            snprintf(directory, sizeof(directory), "BIN/%s/%.8s", sensorDataDir, startTimeString);
 
             LOG_DEBUG("List \"%s\"", directory);
 
+            std::vector<FileInfo> fileList;
             const char *content = SD::FS::list(directory, LS_SIZE);
             if (content && strlen(content) > 0)
             {
                 std::istringstream stream(content);
                 std::string line;
                 int fileId = 0;
-
-#if 0
-                Log::write(content);
-#endif
 
                 while (std::getline(stream, line))
                 {
@@ -105,26 +101,37 @@ namespace
                     }
                 }
             }
+            else
+            {
+                LOG_WARNING("Directory \"%s\" is empty", directory);
+            }
 
             int fileId = 0;
             for (auto it = fileList.rbegin(); it != fileList.rend(); it++)
             {
-                if (fileId > endFileId)
-                {
-                    break;
-                }
-
                 if (fileId >= startFileId)
                 {
                     LOG_DEBUG("File \"%s\", size %d, time %ld", it->path, it->size, it->time);
                     downloadList.push_back(*it);
-                    size += it->size;
+                    downloadSize += it->size;
                 }
+
                 fileId++;
+                if (fileId > endFileId)
+                {
+                    break;
+                }
             }
         }
+        else
+        {
+            LOG_ERROR("Wrong load params: sensor %d, data %d, start time %ld, file id %d-%d",
+                      sensorType, dataType, startTime, startFileId, endFileId);
+        }
 
-        return size;
+        LOG_DEBUG("Files to download %d, total size %d", downloadList.size(), downloadSize);
+
+        return downloadSize;
     }
 
     void downloadData()
@@ -136,27 +143,47 @@ namespace
             bool result = sdFile.open(it->path);
             if (result == true)
             {
-                if (it->size == sdFile.size() && it->size <= sizeof(binPacket.buffer))
+                int fileSize = it->size;
+                if (fileSize == sdFile.size() && fileSize <= sizeof(binPacket.buffer))
                 {
-                    int size = it->size;
-                    result = sdFile.read(binPacket.buffer, size);
+                    result = sdFile.read(binPacket.buffer, fileSize);
                     if (result == true)
                     {
-                        Serials::SerialDevice *device = Serials::Manager::getCommandSourceDevice();
-                        if (device != nullptr)
+                        Serials::SerialDevice *serialDevice = Serials::Manager::getCommandSourceDevice();
+                        if (serialDevice != nullptr)
                         {
                             FastCRC16 crc16;
-                            binPacket.header.crc16 = crc16.modbus((uint8_t *)binPacket.buffer, size);
-                            binPacket.header.length = size;
+                            binPacket.header.crc16 = crc16.modbus((uint8_t *)binPacket.buffer, fileSize);
+                            binPacket.header.length = fileSize;
 
                             const char *binData = (char *)&binPacket;
-                            size_t binSize = sizeof(BinHeader) + size;
-                            device->write(binData, binSize);
+                            size_t binSize = sizeof(BinHeader) + fileSize;
+                            result = serialDevice->write(binData, binSize);
+                            if (result != true)
+                            {
+                                LOG_WARNING("Write bin data to serial failed, size %d", binSize);
+                            }
+                        }
+                        else
+                        {
+                            LOG_WARNING("Source serial device failed");
                         }
                     }
+                    else
+                    {
+                        LOG_WARNING("File \"%s\" failed to read, size %d", it->path, fileSize);
+                    }
+                }
+                else
+                {
+                    LOG_WARNING("File size %d error, buffer size %d", fileSize, sizeof(binPacket.buffer));
                 }
 
                 sdFile.close();
+            }
+            else
+            {
+                LOG_WARNING("File \"%s\" failed to open", it->path);
             }
         }
     }
