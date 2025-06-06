@@ -236,6 +236,9 @@ namespace
     // File on SD to store raw measurements data
     SD::File sdRawFile;
 
+    // Sensors' sampling active flag (true - active)
+    bool isSamplingActive = false;
+
     // Current measurements context
     Context context;
 
@@ -280,9 +283,9 @@ namespace
     };
 
     // Main process functions
-    void startSampling();
-    void stopSampling();
-    void startMeasurements();
+    bool startSampling();
+    bool stopSampling();
+    void setupMeasurements();
     void restartMeasurements();
     void processMeasurements(size_t index);
     void calculateAccelResult(const int16_t *pAccX, float meanAccX, const int16_t *pAccY, float meanAccY, size_t length);
@@ -527,43 +530,61 @@ namespace
     /**
      * @brief Start sensors sampling
      */
-    void startSampling()
+    bool startSampling()
     {
-        LOG_INFO("Start sampling");
-
-        // Start sampling task
-        eventGroup.set(EventBits::startTask);
-
-        // Wait sampling task is running
-        EventBits_t events = eventGroup.wait(EventBits::taskIsRunning);
-        if (!(events & EventBits::taskIsRunning))
+        if (isSamplingActive == false)
         {
-            LOG_ERROR("Sampling task start failed");
+            LOG_INFO("Start sampling");
+
+            // Start sampling task
+            eventGroup.set(EventBits::startTask);
+
+            // Wait sampling task is running
+            EventBits_t events = eventGroup.wait(EventBits::taskIsRunning);
+            if (events & EventBits::taskIsRunning)
+            {
+                isSamplingActive = true;
+            }
+            else
+            {
+                LOG_ERROR("Sampling start failed");
+            }
         }
+
+        return (isSamplingActive == true);
     }
 
     /**
      * @brief Stop sensors sampling
      */
-    void stopSampling()
+    bool stopSampling()
     {
-        LOG_INFO("Stop sampling");
-
-        // Stop sampling task
-        eventGroup.set(EventBits::stopTask);
-
-        // Wait sampling task is idle
-        EventBits_t events = eventGroup.wait(EventBits::taskIsIdle);
-        if (!(events & EventBits::taskIsIdle))
+        if (isSamplingActive == true)
         {
-            LOG_ERROR("Sampling task stop failed");
+            LOG_INFO("Stop sampling");
+
+            // Stop sampling task
+            eventGroup.set(EventBits::stopTask);
+
+            // Wait sampling task is idle
+            EventBits_t events = eventGroup.wait(EventBits::taskIsIdle);
+            if (events & EventBits::taskIsIdle)
+            {
+                isSamplingActive = false;
+            }
+            else
+            {
+                LOG_ERROR("Sampling stop failed");
+            }
         }
+
+        return (isSamplingActive == false);
     }
 
     /**
      * @brief Start the measurements process
      */
-    void startMeasurements()
+    void setupMeasurements()
     {
         context.setup(settings);
 
@@ -710,9 +731,6 @@ namespace
                 sdRawFile.close();
             }
         }
-
-        // Start sensors sampling
-        startSampling();
     }
 
     /**
@@ -720,18 +738,14 @@ namespace
      */
     void restartMeasurements()
     {
-        // Stop sensors sampling
-        stopSampling();
-
-        // Check if at least one segment is ready
-        if (context.segmentCount > 0)
+        if (isSamplingActive == true)
         {
-            // Save measurements to the storage
-            saveMeasurements();
-        }
+            // Stop current sensor measurements
+            Manager::stop();
 
-        // Start the measurements process
-        startMeasurements();
+            // Start next sensor measurements
+            Manager::start();
+        }
     }
 
     /**
@@ -2229,14 +2243,10 @@ bool Manager::initialize()
 
         // Wait sampling task is idle
         EventBits_t events = eventGroup.wait(EventBits::taskIsIdle);
-        if (events & EventBits::taskIsIdle)
-        {
-            // Start the measurements process
-            startMeasurements();
-        }
-        else
+        if (!(events & EventBits::taskIsIdle))
         {
             LOG_ERROR("Sampling task creation failed");
+            status = false;
         }
     }
 
@@ -2244,7 +2254,43 @@ bool Manager::initialize()
 }
 
 /**
- * @brief Perform sensor input data processing
+ * @brief Start sensor measurements
+ *
+ * @return true if processing is started, false otherwise
+ */
+bool Manager::start()
+{
+    // Start the measurements process
+    setupMeasurements();
+
+    // Start sensors sampling
+    bool result = startSampling();
+
+    return result;
+}
+
+/**
+ * @brief Stop sensor measurements
+ *
+ * @return true if processing is stopped, false otherwise
+ */
+bool Manager::stop()
+{
+    // Stop sensors sampling
+    bool result = stopSampling();
+
+    // Check if at least one segment is ready
+    if (context.segmentCount > 0)
+    {
+        // Save measurements to the storage
+        saveMeasurements();
+    }
+
+    return result;
+}
+
+/**
+ * @brief Perform sensor measurements
  */
 void Manager::process()
 {
@@ -2264,11 +2310,8 @@ void Manager::process()
 
         if (readyPcnt >= completePcnt)
         {
-            // Stop sensors sampling
-            stopSampling();
-
-            // Save measurements to the storage
-            saveMeasurements();
+            // Stop current sensor measurements
+            Manager::stop();
 
             // Check if board should go to sleep during pause interval
             if (context.config.pauseInterval > 0)
@@ -2279,8 +2322,8 @@ void Manager::process()
             }
             else
             {
-                // Start the measurements process
-                startMeasurements();
+                // Start next sensor measurements
+                Manager::start();
             }
         }
     }

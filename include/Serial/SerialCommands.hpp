@@ -53,11 +53,14 @@ namespace Serials
         LogLevel,         // 20: Set/Get log messages level
         BatteryStatus,    // 21: Get battery status
         FwVersion,        // 22: Get FW version information
-        DownloadRecent,   // 23: Set download range starting from now
-        DownloadHistory,  // 24: Set download range starting from timestamp
-        DownloadType,     // 25: Set download data type
-        DownloadSize,     // 26: Get download data size in bytes
-        DownloadData,     // 27: Get download data
+
+        // There are application commands below, hidden for user
+        AppKeepAlive,       // 23: External application keep alive command
+        AppDownloadRecent,  // 24: Set download range starting from now
+        AppDownloadHistory, // 25: Set download range starting from timestamp
+        AppDownloadType,    // 26: Set download data type
+        AppDownloadSize,    // 27: Get download data size in bytes
+        AppDownloadData,    // 28: Get download data
 
         Commands // Total number of serial commands
     };
@@ -190,27 +193,32 @@ namespace Serials
             .accessMask = AccessMask::read,
         },
         {
-            .id = CommandId::DownloadRecent,
+            .id = CommandId::AppKeepAlive,
+            .string = "KPLV",
+            .accessMask = AccessMask::execute,
+        },
+        {
+            .id = CommandId::AppDownloadRecent,
             .string = "DWNR",
             .accessMask = AccessMask::write,
         },
         {
-            .id = CommandId::DownloadHistory,
+            .id = CommandId::AppDownloadHistory,
             .string = "DWNH",
             .accessMask = AccessMask::write,
         },
         {
-            .id = CommandId::DownloadType,
+            .id = CommandId::AppDownloadType,
             .string = "DWNT",
             .accessMask = AccessMask::write,
         },
         {
-            .id = CommandId::DownloadSize,
+            .id = CommandId::AppDownloadSize,
             .string = "DWNS",
             .accessMask = AccessMask::read,
         },
         {
-            .id = CommandId::DownloadData,
+            .id = CommandId::AppDownloadData,
             .string = "DWND",
             .accessMask = AccessMask::read,
         },

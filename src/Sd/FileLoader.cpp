@@ -87,7 +87,9 @@ namespace
                 std::string line;
                 int fileId = 0;
 
+#if 0
                 Log::write(content);
+#endif
 
                 while (std::getline(stream, line))
                 {
@@ -168,7 +170,7 @@ namespace
 
         LOG_TRACE("Register serial read common handlers");
 
-        Serials::Manager::subscribeToRead(Serials::CommandId::DownloadSize,
+        Serials::Manager::subscribeToRead(Serials::CommandId::AppDownloadSize,
                                           [](const char **responseString)
                                           {
                                               int size = getDownloadSize();
@@ -177,7 +179,7 @@ namespace
                                               *responseString = dataString;
                                           });
 
-        Serials::Manager::subscribeToRead(Serials::CommandId::DownloadData,
+        Serials::Manager::subscribeToRead(Serials::CommandId::AppDownloadData,
                                           [](const char **responseString)
                                           {
                                               downloadData();
@@ -194,7 +196,7 @@ namespace
     {
         LOG_TRACE("Register serial write common handlers");
 
-        Serials::Manager::subscribeToWrite(Serials::CommandId::DownloadRecent,
+        Serials::Manager::subscribeToWrite(Serials::CommandId::AppDownloadRecent,
                                            [](const char *dataString)
                                            {
                                                // "START,END"
@@ -210,7 +212,7 @@ namespace
                                                }
                                            });
 
-        Serials::Manager::subscribeToWrite(Serials::CommandId::DownloadHistory,
+        Serials::Manager::subscribeToWrite(Serials::CommandId::AppDownloadHistory,
                                            [](const char *dataString)
                                            {
                                                // "TIMESTAMP,START,END"
@@ -225,7 +227,7 @@ namespace
                                                }
                                            });
 
-        Serials::Manager::subscribeToWrite(Serials::CommandId::DownloadType,
+        Serials::Manager::subscribeToWrite(Serials::CommandId::AppDownloadType,
                                            [](const char *dataString)
                                            {
                                                // "SENSOR,DATA"

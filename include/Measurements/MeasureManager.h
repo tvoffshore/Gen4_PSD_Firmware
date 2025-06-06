@@ -23,7 +23,21 @@ namespace Measurements::Manager
     bool initialize();
 
     /**
-     * @brief Perform sensor input data processing
+     * @brief Start sensor measurements
+     *
+     * @return true if processing is started, false otherwise
+     */
+    bool start();
+
+    /**
+     * @brief Stop sensor measurements
+     *
+     * @return true if processing is stopped, false otherwise
+     */
+    bool stop();
+
+    /**
+     * @brief Perform sensor measurements
      */
     void process();
 } // namespace Measurements::Manager

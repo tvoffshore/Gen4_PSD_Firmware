@@ -194,7 +194,7 @@ bool Imu::stop(Module module)
 
     if (isInitialized == true)
     {
-        LOG_INFO("Suspend %s", module == Module::Accel ? "ACCEL" : "GYRO");
+        LOG_DEBUG("Suspend %s", module == Module::Accel ? "ACCEL" : "GYRO");
 
         if (module == Module::Accel)
         {

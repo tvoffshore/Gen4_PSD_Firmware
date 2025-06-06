@@ -9,6 +9,9 @@
  *
  */
 
+#include <stdbool.h>
+#include <stdint.h>
+
 // Lib headers
 #include <Log.hpp>
 #include <Settings.hpp>
@@ -23,6 +26,98 @@
 #include "Sd/File.hpp"
 #include "Sd/FileLoader.hpp"
 #include "Serial/SerialManager.hpp"
+
+namespace
+{
+    // External application connection flag (true - connected)
+    bool isAppConnected = false;
+    // Sensors' measurements activity flag (true - active)
+    bool isMeasurementsActive = false;
+
+    // The last application keep alive command receive time, milliseconds
+    int appKeepAliveRxTimeMs = 0;
+
+    // Application keep alive timeout to decide it is no longer connected, milliseconds
+    constexpr int appKeepAliveTimeoutMs = 5 * 1000;
+} // namespace
+
+/**
+ * @brief Start sensors' measurements
+ */
+void startMeasurements()
+{
+    if (isMeasurementsActive == false)
+    {
+        LOG_INFO("Start sensors' measurements");
+
+        bool result = Measurements::Manager::start();
+        if (result == true)
+        {
+            isMeasurementsActive = true;
+        }
+        else
+        {
+            LOG_ERROR("Measurements start failed");
+        }
+    }
+}
+
+/**
+ * @brief Stop sensors' measurements
+ */
+void stopMeasurements()
+{
+    if (isMeasurementsActive == true)
+    {
+        LOG_INFO("Stop sensors' measurements");
+
+        bool result = Measurements::Manager::stop();
+        if (result == true)
+        {
+            isMeasurementsActive = false;
+        }
+        else
+        {
+            LOG_ERROR("Measurements stop failed");
+        }
+    }
+}
+
+/**
+ * @brief Handle application keep alive commands according to internal states
+ */
+void appKeepAliveHandler()
+{
+    if (isAppConnected == false)
+    {
+        isAppConnected = true;
+
+        LOG_INFO("Application connected");
+
+        // Stop sensors' measurements
+        stopMeasurements();
+    }
+
+    // Update the last application keep alive command receive time
+    appKeepAliveRxTimeMs = millis();
+}
+
+/**
+ * @brief Perform application connected state checking
+ */
+void appKeepAliveProcess()
+{
+    int expiredMs = millis() - appKeepAliveRxTimeMs;
+    if (expiredMs > appKeepAliveTimeoutMs)
+    {
+        isAppConnected = false;
+
+        LOG_INFO("Application disconnected");
+
+        // Start sensors' measurements
+        startMeasurements();
+    }
+}
 
 /**
  * @brief Register serial read command handlers
@@ -130,6 +225,50 @@ void registerSerialWriteHandlers()
 }
 
 /**
+ * @brief Register to serial commands notifictions
+ */
+void registerSerialCommandNotifications()
+{
+    LOG_DEBUG("Register serial command common notifications");
+
+    Serials::Manager::subscribeToNotify(Serials::CommandId::AppKeepAlive,
+                                        [](Serials::CommandType commandType)
+                                        {
+                                            appKeepAliveHandler();
+                                        });
+
+    Serials::Manager::subscribeToNotify(Serials::CommandId::AppDownloadRecent,
+                                        [](Serials::CommandType commandType)
+                                        {
+                                            appKeepAliveHandler();
+                                        });
+
+    Serials::Manager::subscribeToNotify(Serials::CommandId::AppDownloadHistory,
+                                        [](Serials::CommandType commandType)
+                                        {
+                                            appKeepAliveHandler();
+                                        });
+
+    Serials::Manager::subscribeToNotify(Serials::CommandId::AppDownloadType,
+                                        [](Serials::CommandType commandType)
+                                        {
+                                            appKeepAliveHandler();
+                                        });
+
+    Serials::Manager::subscribeToNotify(Serials::CommandId::AppDownloadSize,
+                                        [](Serials::CommandType commandType)
+                                        {
+                                            appKeepAliveHandler();
+                                        });
+
+    Serials::Manager::subscribeToNotify(Serials::CommandId::AppDownloadData,
+                                        [](Serials::CommandType commandType)
+                                        {
+                                            appKeepAliveHandler();
+                                        });
+}
+
+/**
  * @brief Setup preliminary stuff before starting the main loop
  */
 void setup()
@@ -163,6 +302,7 @@ void setup()
     // Register local serial handlers
     registerSerialReadHandlers();
     registerSerialWriteHandlers();
+    registerSerialCommandNotifications();
 
     // Power up the board
     Board::powerUp();
@@ -181,13 +321,18 @@ void setup()
         LOG_ERROR("SD initialization failed");
     }
 
+    FileLoader::initialize();
+
     status = Measurements::Manager::initialize();
-    if (status == false)
+    if (status == true)
+    {
+        // Start sensors' measurements
+        startMeasurements();
+    }
+    else
     {
         LOG_ERROR("Measurements initialization failed");
     }
-
-    FileLoader::initialize();
 
     int coreID = xPortGetCoreID();
     LOG_DEBUG("Main task start on core #%d", coreID);
@@ -201,6 +346,15 @@ void loop()
     // Receive and handle serial commands from serial devices (if available)
     Serials::Manager::process();
 
-    // Perform sensor input data processing (if needed)
-    Measurements::Manager::process();
+    if (isAppConnected == true)
+    {
+        // Perform application connected state checking
+        appKeepAliveProcess();
+    }
+
+    if (isMeasurementsActive == true)
+    {
+        // Perform sensor input data processing (if needed)
+        Measurements::Manager::process();
+    }
 }
