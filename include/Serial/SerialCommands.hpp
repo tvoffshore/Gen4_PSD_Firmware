@@ -60,7 +60,8 @@ namespace Serials
         AppDownloadHistory, // 25: Set download range starting from timestamp
         AppDownloadType,    // 26: Set download data type
         AppDownloadSize,    // 27: Get download data size in bytes
-        AppDownloadData,    // 28: Get download data
+        AppDownloadData,    // 28: Get current download data chunk
+        AppDownloadNext,    // 29: Switch to the next download data chunk
 
         Commands // Total number of serial commands
     };
@@ -221,6 +222,11 @@ namespace Serials
             .id = CommandId::AppDownloadData,
             .string = "DWND",
             .accessMask = AccessMask::read,
+        },
+        {
+            .id = CommandId::AppDownloadNext,
+            .string = "DWNN",
+            .accessMask = AccessMask::execute,
         },
     };
     static_assert(sizeof(commandsList) / sizeof(*commandsList) == static_cast<size_t>(CommandId::Commands),

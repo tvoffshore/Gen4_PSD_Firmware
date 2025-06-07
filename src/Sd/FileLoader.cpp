@@ -59,13 +59,15 @@ namespace
     time_t startTime = 0;
     int startFileId = 0;
     int endFileId = 0;
-    std::vector<FileInfo> downloadList;
     BinPacket binPacket = {.header = {.magic = 0xFEDCBA98}};
+    std::vector<FileInfo> downloadList;
+    int downloadChunkId = 0;
 
     int getDownloadSize()
     {
         int downloadSize = 0;
         downloadList.clear();
+        downloadChunkId = 0;
 
         if (sensorType < Measurements::SensorType::Count &&
             dataType < Measurements::DataType::Count &&
@@ -134,57 +136,59 @@ namespace
         return downloadSize;
     }
 
-    void downloadData()
+    void downloadDataChunk()
     {
-        SD::File sdFile;
-
-        for (auto it = downloadList.rbegin(); it != downloadList.rend(); ++it)
+        if (downloadChunkId >= downloadList.size())
         {
-            bool result = sdFile.open(it->path);
-            if (result == true)
-            {
-                int fileSize = it->size;
-                if (fileSize == sdFile.size() && fileSize <= sizeof(binPacket.buffer))
-                {
-                    result = sdFile.read(binPacket.buffer, fileSize);
-                    if (result == true)
-                    {
-                        Serials::SerialDevice *serialDevice = Serials::Manager::getCommandSourceDevice();
-                        if (serialDevice != nullptr)
-                        {
-                            FastCRC16 crc16;
-                            binPacket.header.crc16 = crc16.modbus((uint8_t *)binPacket.buffer, fileSize);
-                            binPacket.header.length = fileSize;
+            downloadChunkId = downloadList.size() - 1;
+        }
 
-                            const char *binData = (char *)&binPacket;
-                            size_t binSize = sizeof(BinHeader) + fileSize;
-                            result = serialDevice->write(binData, binSize);
-                            if (result != true)
-                            {
-                                LOG_WARNING("Write bin data to serial failed, size %d", binSize);
-                            }
-                        }
-                        else
+        const auto &dataChunk = downloadList[downloadChunkId];
+
+        SD::File sdFile;
+        bool result = sdFile.open(dataChunk.path);
+        if (result == true)
+        {
+            if (dataChunk.size == sdFile.size() && dataChunk.size <= sizeof(binPacket.buffer))
+            {
+                result = sdFile.read(binPacket.buffer, dataChunk.size);
+                if (result == true)
+                {
+                    Serials::SerialDevice *serialDevice = Serials::Manager::getCommandSourceDevice();
+                    if (serialDevice != nullptr)
+                    {
+                        FastCRC16 crc16;
+                        binPacket.header.crc16 = crc16.modbus((uint8_t *)binPacket.buffer, dataChunk.size);
+                        binPacket.header.length = dataChunk.size;
+
+                        const char *binData = (char *)&binPacket;
+                        size_t binSize = sizeof(BinHeader) + dataChunk.size;
+                        result = serialDevice->write(binData, binSize);
+                        if (result != true)
                         {
-                            LOG_WARNING("Source serial device failed");
+                            LOG_WARNING("Write bin data to serial failed, size %d", binSize);
                         }
                     }
                     else
                     {
-                        LOG_WARNING("File \"%s\" failed to read, size %d", it->path, fileSize);
+                        LOG_WARNING("Source serial device failed");
                     }
                 }
                 else
                 {
-                    LOG_WARNING("File size %d error, buffer size %d", fileSize, sizeof(binPacket.buffer));
+                    LOG_WARNING("File \"%s\" failed to read, size %d", dataChunk.path, dataChunk.size);
                 }
-
-                sdFile.close();
             }
             else
             {
-                LOG_WARNING("File \"%s\" failed to open", it->path);
+                LOG_WARNING("File size %d error, buffer size %d", dataChunk.size, sizeof(binPacket.buffer));
             }
+
+            sdFile.close();
+        }
+        else
+        {
+            LOG_WARNING("File \"%s\" failed to open", dataChunk.path);
         }
     }
 
@@ -195,7 +199,7 @@ namespace
     {
         static char dataString[Serials::SerialDevice::dataMaxLength];
 
-        LOG_TRACE("Register serial read common handlers");
+        LOG_TRACE("Register serial read file loader handlers");
 
         Serials::Manager::subscribeToRead(Serials::CommandId::AppDownloadSize,
                                           [](const char **responseString)
@@ -209,8 +213,8 @@ namespace
         Serials::Manager::subscribeToRead(Serials::CommandId::AppDownloadData,
                                           [](const char **responseString)
                                           {
-                                              downloadData();
-                                              snprintf(dataString, sizeof(dataString), "Sent");
+                                              downloadDataChunk();
+                                              snprintf(dataString, sizeof(dataString), "%d", downloadChunkId);
 
                                               *responseString = dataString;
                                           });
@@ -221,7 +225,7 @@ namespace
      */
     void registerSerialWriteHandlers()
     {
-        LOG_TRACE("Register serial write common handlers");
+        LOG_TRACE("Register serial write file loader handlers");
 
         Serials::Manager::subscribeToWrite(Serials::CommandId::AppDownloadRecent,
                                            [](const char *dataString)
@@ -269,6 +273,24 @@ namespace
                                                }
                                            });
     }
+
+    /**
+     * @brief Register to serial commands notifictions
+     */
+    void registerSerialCommandNotifications()
+    {
+        LOG_DEBUG("Register serial command file loader notifications");
+
+        Serials::Manager::subscribeToNotify(Serials::CommandId::AppDownloadNext,
+                                            [](Serials::CommandType commandType)
+                                            {
+                                                if (downloadChunkId < downloadList.size() - 1)
+                                                {
+                                                    downloadChunkId++;
+                                                    LOG_DEBUG("Switch to the next download chunk %d", downloadChunkId);
+                                                }
+                                            });
+    }
 } // namespace
 
 /**
@@ -279,4 +301,5 @@ void FileLoader::initialize()
     // Register local serial handlers
     registerSerialReadHandlers();
     registerSerialWriteHandlers();
+    registerSerialCommandNotifications();
 }

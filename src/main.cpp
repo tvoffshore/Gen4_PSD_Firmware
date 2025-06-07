@@ -266,6 +266,12 @@ void registerSerialCommandNotifications()
                                         {
                                             appKeepAliveHandler();
                                         });
+
+    Serials::Manager::subscribeToNotify(Serials::CommandId::AppDownloadNext,
+                                        [](Serials::CommandType commandType)
+                                        {
+                                            appKeepAliveHandler();
+                                        });
 }
 
 /**
