@@ -61,16 +61,16 @@ namespace
         constexpr uint8_t All = Raw | Statistic | Psd;
     } // namespace DataTypeMask
 
-    namespace SensorTypeMask
+    namespace SensorMask
     {
-        constexpr uint8_t Accel = (1 << static_cast<size_t>(SensorType::Accel));             // Accelerometer sensor
-        constexpr uint8_t Gyro = (1 << static_cast<size_t>(SensorType::Gyro));               // Gyroscope sensor
-        constexpr uint8_t Angle = (1 << static_cast<size_t>(SensorType::Angle));             // Roll/Pitch angle sensor
-        constexpr uint8_t Adc1 = (1 << static_cast<size_t>(SensorType::Adc1));               // Analog 1 sensor
-        constexpr uint8_t Adc2 = (1 << static_cast<size_t>(SensorType::Adc2));               // Analog 2 sensor
-        constexpr uint8_t AccelResult = (1 << static_cast<size_t>(SensorType::AccelResult)); // Accelerometer sensor
+        constexpr uint8_t Accel = (1 << 0);       // Accelerometer sensor
+        constexpr uint8_t Gyro = (1 << 1);        // Gyroscope sensor
+        constexpr uint8_t Angle = (1 << 2);       // Roll/Pitch angle sensor
+        constexpr uint8_t Adc1 = (1 << 3);        // Analog 1 sensor
+        constexpr uint8_t Adc2 = (1 << 4);        // Analog 2 sensor
+        constexpr uint8_t AccelResult = (1 << 5); // Accelerometer sensor
         constexpr uint8_t All = AccelResult | Adc2 | Adc1 | Angle | Gyro | Accel;
-    } // namespace SensorTypeMask
+    } // namespace SensorMask
 
     // Total time threshold to complete measurements, percents
     constexpr float completePcnt = 99.0;
@@ -95,7 +95,7 @@ namespace
     // Default data type to calculate and store on SD
     constexpr uint8_t dataTypeMaskDefault = DataTypeMask::Psd | DataTypeMask::Statistic;
     // Default sensor type for measurements
-    constexpr uint8_t sensorTypeMaskDefault = SensorTypeMask::All;
+    constexpr uint8_t sensorMaskDefault = SensorMask::All;
 
     // Default sampling frequency, Hz
     constexpr uint8_t sampleFrequencyDefault = 40;
@@ -147,8 +147,41 @@ namespace
         uint16_t psdCutoff;       // PSD cutoff to store the results
         uint8_t psdPoints;        // PSD points count (PSD segment size = 2^x)
         uint8_t sampleFrequency;  // Sampling frequency, Hz
-        uint8_t sensorTypeMask;   // Sensor type bitmask for measurements
+        uint8_t sensorMask;       // Sensor type bitmask for measurements
         uint8_t dataTypeMask;     // Data type bitmask to calculate and store on SD
+    };
+
+    /**
+     * @brief File header structure for measurements saving
+     */
+    struct FileHeader
+    {
+        uint32_t startEpochTime;
+        uint32_t endEpochTime;
+        uint16_t sampleTimeMs;
+        uint8_t dataType;
+        uint8_t sensorType;
+    };
+
+    /**
+     * @brief Header structure for PSD measurements saving
+     */
+    struct PsdHeader
+    {
+        float coreFrequency;
+        float coreAmplitude;
+        uint32_t points;
+    };
+
+    /**
+     * @brief Data structure for Statistic measurements saving
+     */
+    struct StatisticData
+    {
+        float max;
+        float min;
+        float mean;
+        float deviation;
     };
 #pragma pack(pop)
 
@@ -183,10 +216,11 @@ namespace
         size_t sampleTimeMs;                // Interval between samples, milliseconds
         SystemTime::DateTime startDateTime; // Start measurements date and time
         time_t startEpochTime;              // Start measurements epoch time
+        time_t endEpochTime;                // End of measurements epoch time
         MeasureSettings config;             // Current measurements configuration
 
         /**
-         * @brief Setup new context
+         * @brief Setup new measurements' context
          *
          * @param[in] settings Measurements settings
          */
@@ -209,9 +243,10 @@ namespace
 
             // Obtain measurements start date and time
             startEpochTime = SystemTime::getDateTime(startDateTime);
+            endEpochTime = 0;
 
             LOG_INFO("Setup: sensors %u, data type %u, segment %d samples, sample time %d ms, segment time %d ms",
-                     config.sensorTypeMask, config.dataTypeMask, segmentSize, sampleTimeMs, segmentTimeMs);
+                     config.sensorMask, config.dataTypeMask, segmentSize, sampleTimeMs, segmentTimeMs);
         }
     };
 
@@ -278,7 +313,7 @@ namespace
         .psdCutoff = psdCutoffDefault,
         .psdPoints = psdPointsDefault,
         .sampleFrequency = sampleFrequencyDefault,
-        .sensorTypeMask = sensorTypeMaskDefault,
+        .sensorMask = sensorMaskDefault,
         .dataTypeMask = dataTypeMaskDefault,
     };
 
@@ -286,10 +321,13 @@ namespace
     bool startSampling();
     bool stopSampling();
     void setupMeasurements();
+    void finishMeasurements();
     void restartMeasurements();
     void processMeasurements(size_t index);
-    void calculateAccelResult(const int16_t *pAccX, float meanAccX, const int16_t *pAccY, float meanAccY, size_t length);
+    void calculateAccelResult(const int16_t *pAccX, const int16_t *pAccY, size_t length);
     void saveMeasurements();
+    bool savePsdFile(SensorType sensorType, const PsdBin &coreBin, const float *psd, size_t points);
+    bool saveStatisticFile(SensorType sensorType, const StatisticData &data);
 
     // Sampling process functions
     bool enableSensors();
@@ -314,21 +352,21 @@ namespace
 
     inline bool isAccelSet()
     {
-        return (context.config.sensorTypeMask & SensorTypeMask::Accel) ||
-               (context.config.sensorTypeMask & SensorTypeMask::Angle) ||
-               (context.config.sensorTypeMask & SensorTypeMask::AccelResult);
+        return (context.config.sensorMask & SensorMask::Accel) ||
+               (context.config.sensorMask & SensorMask::Angle) ||
+               (context.config.sensorMask & SensorMask::AccelResult);
     }
 
     inline bool isGyroSet()
     {
-        return (context.config.sensorTypeMask & SensorTypeMask::Gyro) ||
-               (context.config.sensorTypeMask & SensorTypeMask::Angle);
+        return (context.config.sensorMask & SensorMask::Gyro) ||
+               (context.config.sensorMask & SensorMask::Angle);
     }
 
     inline bool isAdcSet()
     {
-        return (context.config.sensorTypeMask & SensorTypeMask::Adc1) ||
-               (context.config.sensorTypeMask & SensorTypeMask::Adc2);
+        return (context.config.sensorMask & SensorMask::Adc1) ||
+               (context.config.sensorMask & SensorMask::Adc2);
     }
 
     /**
@@ -394,7 +432,7 @@ namespace
     }
 
     /**
-     * @brief Set data type setting
+     * @brief Set data type mask setting
      *
      * @param dataTypeMask New data type mask
      * @return true if new setting was set, false otherwise
@@ -421,25 +459,25 @@ namespace
     }
 
     /**
-     * @brief Set sensor type setting
+     * @brief Set sensor mask setting
      *
-     * @param sensorTypeMask New sensor type mask
+     * @param sensorMask New sensor mask
      * @return true if new setting was set, false otherwise
      */
-    bool setSensorTypeMask(uint8_t sensorTypeMask)
+    bool setSensorMask(uint8_t sensorMask)
     {
         bool result = false;
 
-        if (sensorTypeMask == 0 || sensorTypeMask > SensorTypeMask::All)
+        if (sensorMask == 0 || sensorMask > SensorMask::All)
         {
-            sensorTypeMask = SensorTypeMask::All;
+            sensorMask = SensorMask::All;
         }
 
-        if (settings.sensorTypeMask != sensorTypeMask)
+        if (settings.sensorMask != sensorMask)
         {
-            LOG_DEBUG("Update sensor type: %u -> %u", settings.sensorTypeMask, sensorTypeMask);
+            LOG_DEBUG("Update sensor type: %u -> %u", settings.sensorMask, sensorMask);
             // Update setting
-            settings.sensorTypeMask = sensorTypeMask;
+            settings.sensorMask = sensorMask;
             Settings::update(settingsId, settings);
             result = true;
         }
@@ -582,7 +620,7 @@ namespace
     }
 
     /**
-     * @brief Start the measurements process
+     * @brief Setup the measurements process
      */
     void setupMeasurements()
     {
@@ -591,25 +629,25 @@ namespace
         if (context.config.dataTypeMask & DataTypeMask::Psd)
         {
             // Setup PSD measurements
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc1)
+            if (context.config.sensorMask & SensorMask::Adc1)
             {
                 psdAdc1.setup(context.segmentSize, context.config.sampleFrequency);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc2)
+            if (context.config.sensorMask & SensorMask::Adc2)
             {
                 psdAdc2.setup(context.segmentSize, context.config.sampleFrequency);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Accel)
+            if (context.config.sensorMask & SensorMask::Accel)
             {
                 psdAccX.setup(context.segmentSize, context.config.sampleFrequency);
                 psdAccY.setup(context.segmentSize, context.config.sampleFrequency);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Gyro)
+            if (context.config.sensorMask & SensorMask::Gyro)
             {
                 psdGyroX.setup(context.segmentSize, context.config.sampleFrequency);
                 psdGyroY.setup(context.segmentSize, context.config.sampleFrequency);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::AccelResult)
+            if (context.config.sensorMask & SensorMask::AccelResult)
             {
                 psdAccResult.setup(context.segmentSize, context.config.sampleFrequency);
             }
@@ -618,32 +656,32 @@ namespace
         if (context.config.dataTypeMask & DataTypeMask::Statistic)
         {
             // Reset measurements statistic
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc1)
+            if (context.config.sensorMask & SensorMask::Adc1)
             {
                 statisticAdc1.reset();
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc2)
+            if (context.config.sensorMask & SensorMask::Adc2)
             {
                 statisticAdc2.reset();
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Accel)
+            if (context.config.sensorMask & SensorMask::Accel)
             {
                 statisticAccX.reset();
                 statisticAccY.reset();
                 statisticAccZ.reset();
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Gyro)
+            if (context.config.sensorMask & SensorMask::Gyro)
             {
                 statisticGyroX.reset();
                 statisticGyroY.reset();
                 statisticGyroZ.reset();
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Angle)
+            if (context.config.sensorMask & SensorMask::Angle)
             {
                 statisticRoll.reset();
                 statisticPitch.reset();
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::AccelResult)
+            if (context.config.sensorMask & SensorMask::AccelResult)
             {
                 statisticAccResult.reset();
             }
@@ -653,12 +691,12 @@ namespace
         {
             char directoryName[30];
 
-            SystemTime::DateTimeString dateTimeString;
-            SystemTime::epochToTimestamp(context.startEpochTime, dateTimeString);
+            SystemTime::DateTimeString fileTimestamp;
+            SystemTime::epochToTimestamp(context.startEpochTime, fileTimestamp);
 
             // CSV/RAW
-            snprintf(directoryName, sizeof(directoryName), "%s/RAW/%.8s", directoryCsv, dateTimeString);
-            bool isOpen = sdRawFile.create(directoryName, dateTimeString, fileExtensionCsv);
+            snprintf(directoryName, sizeof(directoryName), "%s/RAW/%.8s", directoryCsv, fileTimestamp);
+            bool isOpen = sdRawFile.create(directoryName, fileTimestamp, fileExtensionCsv);
             if (isOpen == true)
             {
                 char string[200] = {0};
@@ -672,7 +710,7 @@ namespace
                     stringRemain -= written;
                 }
 
-                if (context.config.sensorTypeMask & SensorTypeMask::Adc1)
+                if (context.config.sensorMask & SensorMask::Adc1)
                 {
                     written = snprintf(&string[stringOffset], stringRemain, "Adc1,");
                     if (written > 0)
@@ -681,7 +719,7 @@ namespace
                         stringRemain -= written;
                     }
                 }
-                if (context.config.sensorTypeMask & SensorTypeMask::Adc2)
+                if (context.config.sensorMask & SensorMask::Adc2)
                 {
                     written = snprintf(&string[stringOffset], stringRemain, "Adc2,");
                     if (written > 0)
@@ -690,7 +728,7 @@ namespace
                         stringRemain -= written;
                     }
                 }
-                if (context.config.sensorTypeMask & SensorTypeMask::Accel)
+                if (context.config.sensorMask & SensorMask::Accel)
                 {
                     written = snprintf(&string[stringOffset], stringRemain, "AccelX,AccelY,AccelZ,");
                     if (written > 0)
@@ -699,7 +737,7 @@ namespace
                         stringRemain -= written;
                     }
                 }
-                if (context.config.sensorTypeMask & SensorTypeMask::Gyro)
+                if (context.config.sensorMask & SensorMask::Gyro)
                 {
                     written = snprintf(&string[stringOffset], stringRemain, "GyroX,GyroY,GyroZ,");
                     if (written > 0)
@@ -708,7 +746,7 @@ namespace
                         stringRemain -= written;
                     }
                 }
-                if (context.config.sensorTypeMask & SensorTypeMask::Angle)
+                if (context.config.sensorMask & SensorMask::Angle)
                 {
                     written = snprintf(&string[stringOffset], stringRemain, "Roll,Pitch,");
                     if (written > 0)
@@ -717,7 +755,7 @@ namespace
                         stringRemain -= written;
                     }
                 }
-                if (context.config.sensorTypeMask & SensorTypeMask::AccelResult)
+                if (context.config.sensorMask & SensorMask::AccelResult)
                 {
                     written = snprintf(&string[stringOffset], stringRemain, "AccelResult,");
                     if (written > 0)
@@ -730,6 +768,22 @@ namespace
                 sdRawFile.println(string);
                 sdRawFile.close();
             }
+        }
+    }
+
+    /**
+     * @brief Finish the measurements process
+     */
+    void finishMeasurements()
+    {
+        // Check if at least one segment is ready
+        if (context.segmentCount > 0)
+        {
+            size_t durationMs = context.segmentCount * context.segmentTimeMs;
+            context.endEpochTime = context.startEpochTime + durationMs / millisPerSecond;
+
+            // Save measurements to the storage
+            saveMeasurements();
         }
     }
 
@@ -777,34 +831,34 @@ namespace
         const float *pSamplesRoll = &buffer.roll[offset];
         const float *pSamplesPitch = &buffer.pitch[offset];
 
-        if (context.config.sensorTypeMask & SensorTypeMask::AccelResult)
+        if (context.config.sensorMask & SensorMask::AccelResult)
         {
-            calculateAccelResult(pSamplesAccX, statisticAccX.mean(),
-                                 pSamplesAccY, statisticAccY.mean(), context.segmentSize);
+            // Calculate Accel Result samples first before PSD and Statistic
+            calculateAccelResult(pSamplesAccX, pSamplesAccY, context.segmentSize);
         }
 
         if (context.config.dataTypeMask & DataTypeMask::Psd)
         {
             // Perform PSD calculations
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc1)
+            if (context.config.sensorMask & SensorMask::Adc1)
             {
                 psdAdc1.computeSegment(pSamplesAdc1);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc2)
+            if (context.config.sensorMask & SensorMask::Adc2)
             {
                 psdAdc2.computeSegment(pSamplesAdc2);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Accel)
+            if (context.config.sensorMask & SensorMask::Accel)
             {
                 psdAccX.computeSegment(pSamplesAccX);
                 psdAccY.computeSegment(pSamplesAccY);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Gyro)
+            if (context.config.sensorMask & SensorMask::Gyro)
             {
                 psdGyroX.computeSegment(pSamplesGyroX);
                 psdGyroY.computeSegment(pSamplesGyroY);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::AccelResult)
+            if (context.config.sensorMask & SensorMask::AccelResult)
             {
                 psdAccResult.computeSegment(accelResult);
             }
@@ -813,32 +867,32 @@ namespace
         if (context.config.dataTypeMask & DataTypeMask::Statistic)
         {
             // Perform Statistic calculations
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc1)
+            if (context.config.sensorMask & SensorMask::Adc1)
             {
                 statisticAdc1.calculate(pSamplesAdc1, context.segmentSize);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc2)
+            if (context.config.sensorMask & SensorMask::Adc2)
             {
                 statisticAdc2.calculate(pSamplesAdc2, context.segmentSize);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Accel)
+            if (context.config.sensorMask & SensorMask::Accel)
             {
                 statisticAccX.calculate(pSamplesAccX, context.segmentSize);
                 statisticAccY.calculate(pSamplesAccY, context.segmentSize);
                 statisticAccZ.calculate(pSamplesAccZ, context.segmentSize);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Gyro)
+            if (context.config.sensorMask & SensorMask::Gyro)
             {
                 statisticGyroX.calculate(pSamplesGyroX, context.segmentSize);
                 statisticGyroY.calculate(pSamplesGyroY, context.segmentSize);
                 statisticGyroZ.calculate(pSamplesGyroZ, context.segmentSize);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Angle)
+            if (context.config.sensorMask & SensorMask::Angle)
             {
                 statisticRoll.calculate(pSamplesRoll, context.segmentSize);
                 statisticPitch.calculate(pSamplesPitch, context.segmentSize);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::AccelResult)
+            if (context.config.sensorMask & SensorMask::AccelResult)
             {
                 statisticAccResult.calculate(accelResult, context.segmentSize);
             }
@@ -858,10 +912,10 @@ namespace
                     int stringOffset = 0;
                     size_t stringRemain = sizeof(string);
 
-                    SystemTime::DateTimeString dateTimeString;
+                    SystemTime::DateTimeString timestamp;
                     time_t epochTime = context.startEpochTime + timeOffsetMs / millisPerSecond;
-                    SystemTime::epochToTimestamp(epochTime, dateTimeString);
-                    int written = snprintf(&string[stringOffset], stringRemain, "%s", dateTimeString);
+                    SystemTime::epochToTimestamp(epochTime, timestamp);
+                    int written = snprintf(&string[stringOffset], stringRemain, "%s", timestamp);
                     if (written > 0)
                     {
                         stringOffset += written;
@@ -876,7 +930,7 @@ namespace
                         stringRemain -= written;
                     }
 
-                    if (context.config.sensorTypeMask & SensorTypeMask::Adc1)
+                    if (context.config.sensorMask & SensorMask::Adc1)
                     {
                         written = snprintf(&string[stringOffset], stringRemain, "%u,", pSamplesAdc1[idx]);
                         if (written > 0)
@@ -885,7 +939,7 @@ namespace
                             stringRemain -= written;
                         }
                     }
-                    if (context.config.sensorTypeMask & SensorTypeMask::Adc2)
+                    if (context.config.sensorMask & SensorMask::Adc2)
                     {
                         written = snprintf(&string[stringOffset], stringRemain, "%u,", pSamplesAdc2[idx]);
                         if (written > 0)
@@ -894,7 +948,7 @@ namespace
                             stringRemain -= written;
                         }
                     }
-                    if (context.config.sensorTypeMask & SensorTypeMask::Accel)
+                    if (context.config.sensorMask & SensorMask::Accel)
                     {
                         written = snprintf(&string[stringOffset], stringRemain, "%d,", pSamplesAccX[idx]);
                         if (written > 0)
@@ -915,7 +969,7 @@ namespace
                             stringRemain -= written;
                         }
                     }
-                    if (context.config.sensorTypeMask & SensorTypeMask::Gyro)
+                    if (context.config.sensorMask & SensorMask::Gyro)
                     {
                         written = snprintf(&string[stringOffset], stringRemain, "%d,", pSamplesGyroX[idx]);
                         if (written > 0)
@@ -936,7 +990,7 @@ namespace
                             stringRemain -= written;
                         }
                     }
-                    if (context.config.sensorTypeMask & SensorTypeMask::Angle)
+                    if (context.config.sensorMask & SensorMask::Angle)
                     {
                         written = snprintf(&string[stringOffset], stringRemain, "%.1f,", pSamplesRoll[idx]);
                         if (written > 0)
@@ -951,7 +1005,7 @@ namespace
                             stringRemain -= written;
                         }
                     }
-                    if (context.config.sensorTypeMask & SensorTypeMask::AccelResult)
+                    if (context.config.sensorMask & SensorMask::AccelResult)
                     {
                         written = snprintf(&string[stringOffset], stringRemain, "%.2f,", accelResult[idx]);
                         if (written > 0)
@@ -980,16 +1034,28 @@ namespace
      * @param pAccY Pointer to accelerometer Y axis data
      * @param length Number of data points
      */
-    void calculateAccelResult(const int16_t *pAccX, float meanAccX, const int16_t *pAccY, float meanAccY, size_t length)
+    void calculateAccelResult(const int16_t *pAccX, const int16_t *pAccY, size_t length)
     {
         float sumX = 0;
         float sumY = 0;
         float sumX2 = 0;
         float sumXY = 0;
+        float meanAccX = 0;
+        float meanAccY = 0;
 
         for (size_t idx = 0; idx < length; idx++)
         {
-            // Remove mean
+            meanAccX += static_cast<float>(pAccX[idx]);
+            meanAccY += static_cast<float>(pAccY[idx]);
+        }
+
+        // Calculate average
+        meanAccX /= length;
+        meanAccY /= length;
+
+        for (size_t idx = 0; idx < length; idx++)
+        {
+            // Remove average
             float x = Imu::accelToMs2(pAccX[idx] - meanAccX);
             float y = Imu::accelToMs2(pAccY[idx] - meanAccY);
 
@@ -1032,10 +1098,21 @@ namespace
      */
     void saveMeasurements()
     {
-        SystemTime::DateTimeString dateTimeString;
-        char directoryName[30];
-        char fileName[30];
-        SD::File sdFile;
+        PsdBin coreBinAdc1;
+        PsdBin coreBinAdc2;
+        PsdBin coreBinAccX;
+        PsdBin coreBinAccY;
+        PsdBin coreBinGyroX;
+        PsdBin coreBinGyroY;
+        PsdBin coreBinAccResult;
+
+        const float *resultPsdAdc1 = nullptr;
+        const float *resultPsdAdc2 = nullptr;
+        const float *resultPsdAccX = nullptr;
+        const float *resultPsdAccY = nullptr;
+        const float *resultPsdGyroX = nullptr;
+        const float *resultPsdGyroY = nullptr;
+        const float *resultPsdAccResult = nullptr;
 
         // If 𝑁 is even (segmentSize = 2^N), you have 𝑁/2+1 useful components
         // because the symmetric part of the FFT spectrum for real-valued signals
@@ -1047,357 +1124,186 @@ namespace
             resultPoints = context.config.psdCutoff;
         }
 
-        Measurements::PsdBin coreBinAdc1;
-        Measurements::PsdBin coreBinAdc2;
-        Measurements::PsdBin coreBinAccX;
-        Measurements::PsdBin coreBinAccY;
-        Measurements::PsdBin coreBinGyroX;
-        Measurements::PsdBin coreBinGyroY;
-        Measurements::PsdBin coreBinAccResult;
-
-        const float *resultPsdAdc1 = nullptr;
-        const float *resultPsdAdc2 = nullptr;
-        const float *resultPsdAccX = nullptr;
-        const float *resultPsdAccY = nullptr;
-        const float *resultPsdGyroX = nullptr;
-        const float *resultPsdGyroY = nullptr;
-        const float *resultPsdAccResult = nullptr;
+        // Get current battery level
+        Battery::Status batteryStatus = Battery::readStatus();
 
         // Set CPU frequency to the maximum possible
         Power::setCpuFrequency(Power::cpuFrequencyMaxMHz);
 
-        SystemTime::epochToTimestamp(context.startEpochTime, dateTimeString);
-        Battery::Status batteryStatus = Battery::readStatus();
-
         if (context.config.dataTypeMask & DataTypeMask::Psd)
         {
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc1)
+            if (context.config.sensorMask & SensorMask::Adc1)
             {
                 resultPsdAdc1 = psdAdc1.getResult(&coreBinAdc1);
                 // BIN/PSD/ADC1
-                snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
-                         getDirectory(SensorType::Adc1, DataType::Psd), dateTimeString);
-                snprintf(fileName, sizeof(fileName), "%u", context.startEpochTime);
-                bool isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
-                if (isOpen == true)
-                {
-                    sdFile.write(&context.startEpochTime, sizeof(context.startEpochTime));
-
-                    sdFile.write(&coreBinAdc1.frequency, sizeof(coreBinAdc1.frequency));
-                    sdFile.write(&coreBinAdc1.amplitude, sizeof(coreBinAdc1.amplitude));
-                    sdFile.write(resultPsdAdc1, resultPoints * sizeof(*resultPsdAdc1));
-
-                    sdFile.close();
-                }
-                LOG_DEBUG("ADC_1 PSD: Core Frequency %lfHz - %lf", coreBinAdc1.frequency, coreBinAdc1.amplitude);
+                savePsdFile(SensorType::Adc1, coreBinAdc1, resultPsdAdc1, resultPoints);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc2)
+
+            if (context.config.sensorMask & SensorMask::Adc2)
             {
                 resultPsdAdc2 = psdAdc2.getResult(&coreBinAdc2);
                 // BIN/PSD/ADC2
-                snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
-                         getDirectory(SensorType::Adc2, DataType::Psd), dateTimeString);
-                snprintf(fileName, sizeof(fileName), "%u", context.startEpochTime);
-                bool isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
-                if (isOpen == true)
-                {
-                    sdFile.write(&context.startEpochTime, sizeof(context.startEpochTime));
-
-                    sdFile.write(&coreBinAdc2.frequency, sizeof(coreBinAdc2.frequency));
-                    sdFile.write(&coreBinAdc2.amplitude, sizeof(coreBinAdc2.amplitude));
-                    sdFile.write(resultPsdAdc2, resultPoints * sizeof(*resultPsdAdc2));
-
-                    sdFile.close();
-                }
-                LOG_DEBUG("ADC_2 PSD: Core Frequency %lfHz - %lf", coreBinAdc2.frequency, coreBinAdc2.amplitude);
+                savePsdFile(SensorType::Adc2, coreBinAdc2, resultPsdAdc2, resultPoints);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Accel)
+
+            if (context.config.sensorMask & SensorMask::Accel)
             {
                 resultPsdAccX = psdAccX.getResult(&coreBinAccX);
+                // BIN/PSD/ACC_X
+                savePsdFile(SensorType::AccelX, coreBinAccX, resultPsdAccX, resultPoints);
+
                 resultPsdAccY = psdAccY.getResult(&coreBinAccY);
-                // BIN/PSD/ACC
-                snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
-                         getDirectory(SensorType::Accel, DataType::Psd), dateTimeString);
-                snprintf(fileName, sizeof(fileName), "%u", context.startEpochTime);
-                bool isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
-                if (isOpen == true)
-                {
-                    sdFile.write(&context.startEpochTime, sizeof(context.startEpochTime));
-
-                    sdFile.write(&coreBinAccX.frequency, sizeof(coreBinAccX.frequency));
-                    sdFile.write(&coreBinAccX.amplitude, sizeof(coreBinAccX.amplitude));
-                    sdFile.write(resultPsdAccX, resultPoints * sizeof(*resultPsdAccX));
-
-                    sdFile.write(&coreBinAccY.frequency, sizeof(coreBinAccY.frequency));
-                    sdFile.write(&coreBinAccY.amplitude, sizeof(coreBinAccY.amplitude));
-                    sdFile.write(resultPsdAccY, resultPoints * sizeof(*resultPsdAccY));
-
-                    sdFile.close();
-                }
-                LOG_DEBUG("ACC_X PSD: Core Frequency %lfHz - %lf", coreBinAccX.frequency, coreBinAccX.amplitude);
-                LOG_DEBUG("ACC_Y PSD: Core Frequency %lfHz - %lf", coreBinAccY.frequency, coreBinAccY.amplitude);
+                // BIN/PSD/ACC_Y
+                savePsdFile(SensorType::AccelY, coreBinAccY, resultPsdAccY, resultPoints);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Gyro)
+
+            if (context.config.sensorMask & SensorMask::Gyro)
             {
                 resultPsdGyroX = psdGyroX.getResult(&coreBinGyroX);
+                // BIN/PSD/GYR_X
+                savePsdFile(SensorType::GyroX, coreBinGyroX, resultPsdGyroX, resultPoints);
+
                 resultPsdGyroY = psdGyroY.getResult(&coreBinGyroY);
-                // BIN/PSD/GYR
-                snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
-                         getDirectory(SensorType::Gyro, DataType::Psd), dateTimeString);
-                snprintf(fileName, sizeof(fileName), "%u", context.startEpochTime);
-                bool isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
-                if (isOpen == true)
-                {
-                    sdFile.write(&context.startEpochTime, sizeof(context.startEpochTime));
-
-                    sdFile.write(&coreBinGyroX.frequency, sizeof(coreBinGyroX.frequency));
-                    sdFile.write(&coreBinGyroX.amplitude, sizeof(coreBinGyroX.amplitude));
-                    sdFile.write(resultPsdGyroX, resultPoints * sizeof(*resultPsdGyroX));
-
-                    sdFile.write(&coreBinGyroY.frequency, sizeof(coreBinGyroY.frequency));
-                    sdFile.write(&coreBinGyroY.amplitude, sizeof(coreBinGyroY.amplitude));
-                    sdFile.write(resultPsdGyroY, resultPoints * sizeof(*resultPsdGyroY));
-
-                    sdFile.close();
-                }
-                LOG_DEBUG("GYRO_X PSD: Core Frequency %lfHz - %lf", coreBinGyroX.frequency, coreBinGyroX.amplitude);
-                LOG_DEBUG("GYRO_Y PSD: Core Frequency %lfHz - %lf", coreBinGyroY.frequency, coreBinGyroY.amplitude);
+                // BIN/PSD/GYR_Y
+                savePsdFile(SensorType::GyroY, coreBinGyroY, resultPsdGyroY, resultPoints);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::AccelResult)
+
+            if (context.config.sensorMask & SensorMask::AccelResult)
             {
                 resultPsdAccResult = psdAccResult.getResult(&coreBinAccResult);
                 // BIN/PSD/ACC_RES
-                snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
-                         getDirectory(SensorType::AccelResult, DataType::Psd), dateTimeString);
-                snprintf(fileName, sizeof(fileName), "%u", context.startEpochTime);
-                bool isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
-                if (isOpen == true)
-                {
-                    sdFile.write(&context.startEpochTime, sizeof(context.startEpochTime));
-
-                    sdFile.write(&coreBinAccResult.frequency, sizeof(coreBinAccResult.frequency));
-                    sdFile.write(&coreBinAccResult.amplitude, sizeof(coreBinAccResult.amplitude));
-                    sdFile.write(resultPsdAccResult, resultPoints * sizeof(*resultPsdAccResult));
-
-                    sdFile.close();
-                }
-                LOG_DEBUG("ACC_RESULT PSD: Core Frequency %lfHz - %lf",
-                          coreBinAccResult.frequency, coreBinAccResult.amplitude);
+                savePsdFile(SensorType::AccelResult, coreBinAccResult, resultPsdAccResult, resultPoints);
             }
         }
 
         if (context.config.dataTypeMask & DataTypeMask::Statistic)
         {
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc1)
+            if (context.config.sensorMask & SensorMask::Adc1)
             {
+                StatisticData data = {
+                    .max = static_cast<float>(statisticAdc1.max()),
+                    .min = static_cast<float>(statisticAdc1.min()),
+                    .mean = statisticAdc1.mean(),
+                    .deviation = statisticAdc1.deviation(),
+                };
                 // BIN/STAT/ADC1
-                snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
-                         getDirectory(SensorType::Adc1, DataType::Statistic), dateTimeString);
-                snprintf(fileName, sizeof(fileName), "%u", context.startEpochTime);
-                bool isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
-                if (isOpen == true)
-                {
-                    uint16_t max = statisticAdc1.max();
-                    uint16_t min = statisticAdc1.min();
-                    uint16_t mean = statisticAdc1.mean();
-                    uint16_t deviation = statisticAdc1.deviation();
-
-                    sdFile.write(&max, sizeof(max));
-                    sdFile.write(&min, sizeof(min));
-                    sdFile.write(&mean, sizeof(mean));
-                    sdFile.write(&deviation, sizeof(deviation));
-
-                    sdFile.close();
-                }
-                LOG_DEBUG("ADC_1 STAT: Max %d, Min %d, Mean %f, Standard Deviation %f",
-                          statisticAdc1.max(), statisticAdc1.min(), statisticAdc1.mean(), statisticAdc1.deviation());
+                saveStatisticFile(SensorType::Adc1, data);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc2)
+
+            if (context.config.sensorMask & SensorMask::Adc2)
             {
+                StatisticData data = {
+                    .max = static_cast<float>(statisticAdc2.max()),
+                    .min = static_cast<float>(statisticAdc2.min()),
+                    .mean = statisticAdc2.mean(),
+                    .deviation = statisticAdc2.deviation(),
+                };
                 // BIN/STAT/ADC2
-                snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
-                         getDirectory(SensorType::Adc2, DataType::Statistic), dateTimeString);
-                snprintf(fileName, sizeof(fileName), "%u", context.startEpochTime);
-                bool isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
-                if (isOpen == true)
-                {
-                    uint16_t max = statisticAdc2.max();
-                    uint16_t min = statisticAdc2.min();
-                    uint16_t mean = statisticAdc2.mean();
-                    uint16_t deviation = statisticAdc2.deviation();
-
-                    sdFile.write(&max, sizeof(max));
-                    sdFile.write(&min, sizeof(min));
-                    sdFile.write(&mean, sizeof(mean));
-                    sdFile.write(&deviation, sizeof(deviation));
-
-                    sdFile.close();
-                }
-                LOG_DEBUG("ADC_2 STAT: Max %d, Min %d, Mean %f, Standard Deviation %f",
-                          statisticAdc2.max(), statisticAdc2.min(), statisticAdc2.mean(), statisticAdc2.deviation());
+                saveStatisticFile(SensorType::Adc2, data);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Accel)
+
+            if (context.config.sensorMask & SensorMask::Accel)
             {
-                // BIN/STAT/ACC
-                snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
-                         getDirectory(SensorType::Accel, DataType::Statistic), dateTimeString);
-                snprintf(fileName, sizeof(fileName), "%u", context.startEpochTime);
-                bool isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
-                if (isOpen == true)
-                {
-                    uint16_t max = statisticAccX.max();
-                    uint16_t min = statisticAccX.min();
-                    uint16_t mean = statisticAccX.mean();
-                    uint16_t deviation = statisticAccX.deviation();
+                StatisticData dataX = {
+                    .max = static_cast<float>(statisticAccX.max()),
+                    .min = static_cast<float>(statisticAccX.min()),
+                    .mean = statisticAccX.mean(),
+                    .deviation = statisticAccX.deviation(),
+                };
+                // BIN/STAT/ACC_X
+                saveStatisticFile(SensorType::AccelX, dataX);
 
-                    sdFile.write(&max, sizeof(max));
-                    sdFile.write(&min, sizeof(min));
-                    sdFile.write(&mean, sizeof(mean));
-                    sdFile.write(&deviation, sizeof(deviation));
+                StatisticData dataY = {
+                    .max = static_cast<float>(statisticAccY.max()),
+                    .min = static_cast<float>(statisticAccY.min()),
+                    .mean = statisticAccY.mean(),
+                    .deviation = statisticAccY.deviation(),
+                };
+                // BIN/STAT/ACC_Y
+                saveStatisticFile(SensorType::AccelY, dataY);
 
-                    max = statisticAccY.max();
-                    min = statisticAccY.min();
-                    mean = statisticAccY.mean();
-                    deviation = statisticAccY.deviation();
-
-                    sdFile.write(&max, sizeof(max));
-                    sdFile.write(&min, sizeof(min));
-                    sdFile.write(&mean, sizeof(mean));
-                    sdFile.write(&deviation, sizeof(deviation));
-
-                    max = statisticAccZ.max();
-                    min = statisticAccZ.min();
-                    mean = statisticAccZ.mean();
-                    deviation = statisticAccZ.deviation();
-
-                    sdFile.write(&max, sizeof(max));
-                    sdFile.write(&min, sizeof(min));
-                    sdFile.write(&mean, sizeof(mean));
-                    sdFile.write(&deviation, sizeof(deviation));
-
-                    sdFile.close();
-                }
-                LOG_DEBUG("ACC_X STAT: Max %d, Min %d, Mean %f, Standard Deviation %f",
-                          statisticAccX.max(), statisticAccX.min(), statisticAccX.mean(), statisticAccX.deviation());
-                LOG_DEBUG("ACC_Y STAT: Max %d, Min %d, Mean %f, Standard Deviation %f",
-                          statisticAccY.max(), statisticAccY.min(), statisticAccY.mean(), statisticAccY.deviation());
-                LOG_DEBUG("ACC_Z STAT: Max %d, Min %d, Mean %f, Standard Deviation %f",
-                          statisticAccZ.max(), statisticAccZ.min(), statisticAccZ.mean(), statisticAccZ.deviation());
+                StatisticData dataZ = {
+                    .max = static_cast<float>(statisticAccZ.max()),
+                    .min = static_cast<float>(statisticAccZ.min()),
+                    .mean = statisticAccZ.mean(),
+                    .deviation = statisticAccZ.deviation(),
+                };
+                // BIN/STAT/ACC_Z
+                saveStatisticFile(SensorType::AccelZ, dataZ);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Gyro)
+
+            if (context.config.sensorMask & SensorMask::Gyro)
             {
-                // BIN/STAT/GYR
-                snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
-                         getDirectory(SensorType::Gyro, DataType::Statistic), dateTimeString);
-                snprintf(fileName, sizeof(fileName), "%u", context.startEpochTime);
-                bool isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
-                if (isOpen == true)
-                {
-                    uint16_t max = statisticGyroX.max();
-                    uint16_t min = statisticGyroX.min();
-                    uint16_t mean = statisticGyroX.mean();
-                    uint16_t deviation = statisticGyroX.deviation();
+                StatisticData dataX = {
+                    .max = static_cast<float>(statisticGyroX.max()),
+                    .min = static_cast<float>(statisticGyroX.min()),
+                    .mean = statisticGyroX.mean(),
+                    .deviation = statisticGyroX.deviation(),
+                };
+                // BIN/STAT/GYR_X
+                saveStatisticFile(SensorType::GyroX, dataX);
 
-                    sdFile.write(&max, sizeof(max));
-                    sdFile.write(&min, sizeof(min));
-                    sdFile.write(&mean, sizeof(mean));
-                    sdFile.write(&deviation, sizeof(deviation));
+                StatisticData dataY = {
+                    .max = static_cast<float>(statisticGyroY.max()),
+                    .min = static_cast<float>(statisticGyroY.min()),
+                    .mean = statisticGyroY.mean(),
+                    .deviation = statisticGyroY.deviation(),
+                };
+                // BIN/STAT/GYR_Y
+                saveStatisticFile(SensorType::GyroY, dataX);
 
-                    max = statisticGyroY.max();
-                    min = statisticGyroY.min();
-                    mean = statisticGyroY.mean();
-                    deviation = statisticGyroY.deviation();
-
-                    sdFile.write(&max, sizeof(max));
-                    sdFile.write(&min, sizeof(min));
-                    sdFile.write(&mean, sizeof(mean));
-                    sdFile.write(&deviation, sizeof(deviation));
-
-                    max = statisticGyroZ.max();
-                    min = statisticGyroZ.min();
-                    mean = statisticGyroZ.mean();
-                    deviation = statisticGyroZ.deviation();
-
-                    sdFile.write(&max, sizeof(max));
-                    sdFile.write(&min, sizeof(min));
-                    sdFile.write(&mean, sizeof(mean));
-                    sdFile.write(&deviation, sizeof(deviation));
-
-                    sdFile.close();
-                }
-                LOG_DEBUG("GYRO_X STAT: Max %d, Min %d, Mean %f, Standard Deviation %f",
-                          statisticGyroX.max(), statisticGyroX.min(), statisticGyroX.mean(), statisticGyroX.deviation());
-                LOG_DEBUG("GYRO_Y STAT: Max %d, Min %d, Mean %f, Standard Deviation %f",
-                          statisticGyroY.max(), statisticGyroY.min(), statisticGyroY.mean(), statisticGyroY.deviation());
-                LOG_DEBUG("GYRO_Z STAT: Max %d, Min %d, Mean %f, Standard Deviation %f",
-                          statisticGyroZ.max(), statisticGyroZ.min(), statisticGyroZ.mean(), statisticGyroZ.deviation());
+                StatisticData dataZ = {
+                    .max = static_cast<float>(statisticGyroZ.max()),
+                    .min = static_cast<float>(statisticGyroZ.min()),
+                    .mean = statisticGyroZ.mean(),
+                    .deviation = statisticGyroZ.deviation(),
+                };
+                // BIN/STAT/GYR_Z
+                saveStatisticFile(SensorType::GyroZ, dataZ);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::Angle)
+
+            if (context.config.sensorMask & SensorMask::Angle)
             {
-                // BIN/STAT/ANG
-                snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
-                         getDirectory(SensorType::Angle, DataType::Statistic), dateTimeString);
-                snprintf(fileName, sizeof(fileName), "%u", context.startEpochTime);
-                bool isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
-                if (isOpen == true)
-                {
-                    uint16_t max = statisticRoll.max();
-                    uint16_t min = statisticRoll.min();
-                    uint16_t mean = statisticRoll.mean();
-                    uint16_t deviation = statisticRoll.deviation();
+                StatisticData dataRoll = {
+                    .max = statisticRoll.max(),
+                    .min = statisticRoll.min(),
+                    .mean = statisticRoll.mean(),
+                    .deviation = statisticRoll.deviation(),
+                };
+                // BIN/STAT/ROLL
+                saveStatisticFile(SensorType::Roll, dataRoll);
 
-                    sdFile.write(&max, sizeof(max));
-                    sdFile.write(&min, sizeof(min));
-                    sdFile.write(&mean, sizeof(mean));
-                    sdFile.write(&deviation, sizeof(deviation));
-
-                    max = statisticPitch.max();
-                    min = statisticPitch.min();
-                    mean = statisticPitch.mean();
-                    deviation = statisticPitch.deviation();
-
-                    sdFile.write(&max, sizeof(max));
-                    sdFile.write(&min, sizeof(min));
-                    sdFile.write(&mean, sizeof(mean));
-                    sdFile.write(&deviation, sizeof(deviation));
-
-                    sdFile.close();
-                }
-                LOG_DEBUG("ROLL STAT: Max %f, Min %f, Mean %f, Standard Deviation %f",
-                          statisticRoll.max(), statisticRoll.min(), statisticRoll.mean(), statisticRoll.deviation());
-                LOG_DEBUG("PITCH STAT: Max %f, Min %f, Mean %f, Standard Deviation %f",
-                          statisticPitch.max(), statisticPitch.min(), statisticPitch.mean(), statisticPitch.deviation());
+                StatisticData dataPitch = {
+                    .max = statisticPitch.max(),
+                    .min = statisticPitch.min(),
+                    .mean = statisticPitch.mean(),
+                    .deviation = statisticPitch.deviation(),
+                };
+                // BIN/STAT/PITCH
+                saveStatisticFile(SensorType::Pitch, dataPitch);
             }
-            if (context.config.sensorTypeMask & SensorTypeMask::AccelResult)
+
+            if (context.config.sensorMask & SensorMask::AccelResult)
             {
+                StatisticData data = {
+                    .max = statisticAccResult.max(),
+                    .min = statisticAccResult.min(),
+                    .mean = statisticAccResult.mean(),
+                    .deviation = statisticAccResult.deviation(),
+                };
                 // BIN/STAT/ACC_RES
-                snprintf(directoryName, sizeof(directoryName), "%s/%s/%.8s", directoryBin,
-                         getDirectory(SensorType::AccelResult, DataType::Statistic), dateTimeString);
-                snprintf(fileName, sizeof(fileName), "%u", context.startEpochTime);
-                bool isOpen = sdFile.create(directoryName, fileName, fileExtensionBin);
-                if (isOpen == true)
-                {
-                    uint16_t max = statisticAccResult.max();
-                    uint16_t min = statisticAccResult.min();
-                    uint16_t mean = statisticAccResult.mean();
-                    uint16_t deviation = statisticAccResult.deviation();
-
-                    sdFile.write(&max, sizeof(max));
-                    sdFile.write(&min, sizeof(min));
-                    sdFile.write(&mean, sizeof(mean));
-                    sdFile.write(&deviation, sizeof(deviation));
-
-                    sdFile.close();
-                }
-                LOG_DEBUG("ACC_RESULT STAT: Max %f, Min %f, Mean %f, Standard Deviation %f",
-                          statisticAccResult.max(), statisticAccResult.min(),
-                          statisticAccResult.mean(), statisticAccResult.deviation());
+                saveStatisticFile(SensorType::AccelResult, data);
             }
         }
 
         // CSV/PSD_STAT
-        snprintf(directoryName, sizeof(directoryName), "%s/PSD_STAT/%.8s", directoryCsv, dateTimeString);
-        bool isOpen = sdFile.create(directoryName, dateTimeString, fileExtensionCsv);
+        char directory[30];
+        SystemTime::DateTimeString fileTimestamp;
+        SystemTime::epochToTimestamp(context.startEpochTime, fileTimestamp);
+        snprintf(directory, sizeof(directory), "%s/PSD_STAT/%.8s", directoryCsv, fileTimestamp);
+
+        SD::File sdFile;
+        bool isOpen = sdFile.create(directory, fileTimestamp, fileExtensionCsv);
         if (isOpen == true)
         {
             char string[100];
@@ -1419,7 +1325,7 @@ namespace
             sdFile.println(string);
             sdFile.println(""); // End of header
 
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc1)
+            if (context.config.sensorMask & SensorMask::Adc1)
             {
                 sdFile.println("Channel Name,ADC_1");
                 sdFile.println("Channel Units,raw_12bit");
@@ -1450,7 +1356,7 @@ namespace
                 sdFile.println(""); // End of channel
             }
 
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc2)
+            if (context.config.sensorMask & SensorMask::Adc2)
             {
                 sdFile.println("Channel Name,ADC_2");
                 sdFile.println("Channel Units,raw_12bit");
@@ -1481,7 +1387,7 @@ namespace
                 sdFile.println(""); // End of channel
             }
 
-            if (context.config.sensorTypeMask & SensorTypeMask::Accel)
+            if (context.config.sensorMask & SensorMask::Accel)
             {
                 sdFile.println("Channel Name,ACC_X");
                 sdFile.println("Channel Units,m/s^2");
@@ -1555,7 +1461,7 @@ namespace
                 sdFile.println(""); // End of channel
             }
 
-            if (context.config.sensorTypeMask & SensorTypeMask::Gyro)
+            if (context.config.sensorMask & SensorMask::Gyro)
             {
                 sdFile.println("Channel Name,GYRO_X");
                 sdFile.println("Channel Units,rad/s");
@@ -1629,7 +1535,7 @@ namespace
                 sdFile.println(""); // End of channel
             }
 
-            if (context.config.sensorTypeMask & SensorTypeMask::Angle)
+            if (context.config.sensorMask & SensorMask::Angle)
             {
                 sdFile.println("Channel Name,ROLL");
                 sdFile.println("Channel Units,deg");
@@ -1662,7 +1568,7 @@ namespace
                 sdFile.println(""); // End of channel
             }
 
-            if (context.config.sensorTypeMask & SensorTypeMask::AccelResult)
+            if (context.config.sensorMask & SensorMask::AccelResult)
             {
                 sdFile.println("Channel Name,E_ACC_RES");
                 sdFile.println("Channel Units,m/s^2");
@@ -1701,6 +1607,116 @@ namespace
     }
 
     /**
+     * @brief Save PSD measurements to file on SD
+     *
+     * @param sensorType Type of sensor
+     * @param coreBin PSD core bin info
+     * @param psd PSD points
+     * @param points Number of PSD points
+     * @return true if PSD was saved successfully, false otherwise
+     */
+    bool savePsdFile(SensorType sensorType, const PsdBin &coreBin, const float *psd, size_t points)
+    {
+        assert(psd);
+        assert(points > 0);
+
+        const char *sensorName = getSensorName(sensorType);
+        const char *dataName = getDataName(DataType::Psd);
+        LOG_DEBUG("Save %s %s: core bin %lfHz - %lf, points %d",
+                  sensorName, dataName, coreBin.frequency, coreBin.amplitude, points);
+
+        char fileName[30];
+        char directory[30];
+        SystemTime::DateTimeString startTimestamp;
+        SystemTime::epochToTimestamp(context.startEpochTime, startTimestamp);
+        snprintf(directory, sizeof(directory), "%s/%s/%s/%.8s", directoryBin, dataName, sensorName, startTimestamp);
+        snprintf(fileName, sizeof(fileName), "%u", context.startEpochTime);
+
+        SD::File sdFile;
+        bool result = sdFile.create(directory, fileName, fileExtensionBin);
+        if (result == true)
+        {
+            FileHeader fileHeader = {
+                .startEpochTime = static_cast<uint32_t>(context.startEpochTime),
+                .endEpochTime = static_cast<uint32_t>(context.endEpochTime),
+                .sampleTimeMs = static_cast<uint16_t>(context.sampleTimeMs),
+                .dataType = static_cast<uint8_t>(DataType::Psd),
+                .sensorType = static_cast<uint8_t>(sensorType),
+            };
+
+            // Save file header
+            result = sdFile.write(&fileHeader, sizeof(fileHeader));
+            if (result == true)
+            {
+                PsdHeader psdHeader = {
+                    .coreFrequency = coreBin.frequency,
+                    .coreAmplitude = coreBin.amplitude,
+                    .points = points,
+                };
+
+                // Save PSD header
+                result = sdFile.write(&psdHeader, sizeof(psdHeader));
+                if (result == true)
+                {
+                    // Save PSD points
+                    result = sdFile.write(psd, points * sizeof(*psd));
+                }
+            }
+
+            sdFile.close();
+        }
+
+        return result;
+    }
+
+    /**
+     * @brief Save Statistic to file on SD
+     *
+     * @param sensorType Type of sensor
+     * @param data Statistic data
+     * @return true if Statistic was saved successfully, false otherwise
+     */
+    bool saveStatisticFile(SensorType sensorType, const StatisticData &data)
+    {
+        const char *sensorName = getSensorName(sensorType);
+        const char *dataName = getDataName(DataType::Statistic);
+        LOG_DEBUG("Save %s %s: Max %f, Min %f, Mean %f, Standard Deviation %f",
+                  sensorName, dataName, data.max, data.min, data.mean, data.deviation);
+
+        char fileName[30];
+        char directory[30];
+        SystemTime::DateTimeString startTimestamp;
+        SystemTime::epochToTimestamp(context.startEpochTime, startTimestamp);
+        snprintf(directory, sizeof(directory), "%s/%s/%s/%.8s", directoryBin, dataName, sensorName, startTimestamp);
+        snprintf(fileName, sizeof(fileName), "%u", context.startEpochTime);
+
+        SD::File sdFile;
+        bool result = sdFile.create(directory, fileName, fileExtensionBin);
+        if (result == true)
+        {
+            FileHeader fileHeader = {
+                .startEpochTime = static_cast<uint32_t>(context.startEpochTime),
+                .endEpochTime = static_cast<uint32_t>(context.endEpochTime),
+                .sampleTimeMs = static_cast<uint16_t>(context.sampleTimeMs),
+                .dataType = static_cast<uint8_t>(DataType::Statistic),
+                .sensorType = static_cast<uint8_t>(sensorType),
+            };
+
+            // Save file header
+            result = sdFile.write(&fileHeader, sizeof(fileHeader));
+            if (result == true)
+            {
+                // Save Statistic data
+                result = sdFile.write(&data, sizeof(data));
+            }
+
+            sdFile.close();
+        }
+
+        return result;
+    }
+
+    /**
      * @brief Start sensors readings
      *
      * @return true if sensors are started successfully, false otherwsie
@@ -1718,12 +1734,12 @@ namespace
                 return false;
             }
 
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc1)
+            if (context.config.sensorMask & SensorMask::Adc1)
             {
                 adc1.enable();
             }
 
-            if (context.config.sensorTypeMask & SensorTypeMask::Adc2)
+            if (context.config.sensorMask & SensorMask::Adc2)
             {
                 adc2.enable();
             }
@@ -1751,7 +1767,7 @@ namespace
             LOG_INFO("Gyroscope started");
         }
 
-        if (context.config.sensorTypeMask & SensorTypeMask::Angle)
+        if (context.config.sensorMask & SensorMask::Angle)
         {
             // Setup madgwick's IMU and AHRS filter
             madgwickFilter.begin(context.config.sampleFrequency);
@@ -1793,13 +1809,13 @@ namespace
         float gyroDpsY = 0;
         float gyroDpsZ = 0;
 
-        if (context.config.sensorTypeMask & SensorTypeMask::Adc1)
+        if (context.config.sensorMask & SensorMask::Adc1)
         {
             // Read new analog 1 sample
             buffer.adc1[offset] = adc1.read();
         }
 
-        if (context.config.sensorTypeMask & SensorTypeMask::Adc2)
+        if (context.config.sensorMask & SensorMask::Adc2)
         {
             // Read new analog 2 sample
             buffer.adc2[offset] = adc2.read();
@@ -1843,7 +1859,7 @@ namespace
             gyroDpsZ = Imu::gyroToDegs(imuData.z);
         }
 
-        if (context.config.sensorTypeMask & SensorTypeMask::Angle)
+        if (context.config.sensorMask & SensorMask::Angle)
         {
             // Calculate/fill angle buffer data
             madgwickFilter.updateIMU(gyroDpsX, gyroDpsY, gyroDpsZ, accelGX, accelGY, accelGZ);
@@ -1970,7 +1986,7 @@ namespace
         Serials::Manager::subscribeToRead(Serials::CommandId::MeasureControl,
                                           [](const char **responseString)
                                           {
-                                              snprintf(dataString, sizeof(dataString), "%u", settings.sensorTypeMask);
+                                              snprintf(dataString, sizeof(dataString), "%u", settings.sensorMask);
                                               *responseString = dataString;
                                           });
 
@@ -2078,7 +2094,7 @@ namespace
                                            [](const char *dataString)
                                            {
                                                uint8_t value = atoi(dataString);
-                                               bool result = setSensorTypeMask(value);
+                                               bool result = setSensorMask(value);
                                                if (result == true)
                                                {
                                                    // Restart measurements if sensor type was changed
@@ -2163,7 +2179,7 @@ namespace
                                            {
                                                uint8_t value = atoi(dataString);
                                                Analog::GainSelector::setGain(static_cast<Analog::Gain>(value));
-                                               if (context.config.sensorTypeMask & SensorTypeMask::Adc1)
+                                               if (context.config.sensorMask & SensorMask::Adc1)
                                                {
                                                    // Restart measurements if ADC1 gain was changed
                                                    restartMeasurements();
@@ -2175,7 +2191,7 @@ namespace
                                            {
                                                uint8_t value = atoi(dataString);
                                                bool result = Analog::InputSelector::setInputType(static_cast<Analog::InputType>(value));
-                                               if (result == true && (context.config.sensorTypeMask & SensorTypeMask::Adc2))
+                                               if (result == true && (context.config.sensorMask & SensorMask::Adc2))
                                                {
                                                    // Restart measurements if ADC2 input type was changed
                                                    restartMeasurements();
@@ -2260,7 +2276,7 @@ bool Manager::initialize()
  */
 bool Manager::start()
 {
-    // Start the measurements process
+    // Setup the measurements process
     setupMeasurements();
 
     // Start sensors sampling
@@ -2279,12 +2295,8 @@ bool Manager::stop()
     // Stop sensors sampling
     bool result = stopSampling();
 
-    // Check if at least one segment is ready
-    if (context.segmentCount > 0)
-    {
-        // Save measurements to the storage
-        saveMeasurements();
-    }
+    // Finish the measurements process
+    finishMeasurements();
 
     return result;
 }

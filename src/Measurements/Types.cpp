@@ -17,29 +17,57 @@ using namespace Measurements;
 
 namespace
 {
-    // Directory names for different sensor and data types
-    const char *directories[static_cast<int>(SensorType::Count)][static_cast<int>(DataType::Count)] = {
-        {"PSD/ACC", "STAT/ACC", "RAW/ACC"},
-        {"PSD/GYR", "STAT/GYR", "RAW/GYR"},
-        {"PSD/ANG", "STAT/ANG", "RAW/ANG"},
-        {"PSD/ADC1", "STAT/ADC1", "RAW/ADC1"},
-        {"PSD/ADC2", "STAT/ADC2", "RAW/ADC2"},
-        {"PSD/ACC_RES", "STAT/ACC_RES", "RAW/ACC_RES"},
+    // Sensor names list
+    const char *sensorNames[] = {
+        "ACC_X",
+        "ACC_Y",
+        "ACC_Z",
+        "ACC_RES",
+        "GYR_X",
+        "GYR_Y",
+        "GYR_Z",
+        "ROLL",
+        "PITCH",
+        "ADC1",
+        "ADC2",
     };
+    static_assert(sizeof(sensorNames) / sizeof(*sensorNames) == static_cast<int>(SensorType::Count),
+                  "Sensor names list doesn't match to sensor type count!");
+
+    // Data names list
+    const char *dataNames[] = {
+        "PSD",
+        "STAT",
+        "RAW",
+    };
+    static_assert(sizeof(dataNames) / sizeof(*dataNames) == static_cast<int>(DataType::Count),
+                  "Data names list doesn't match to data type count!");
 } // namespace
 
 /**
- * @brief Return the directory name for specified sensor and data
+ * @brief Return the sensor name for specified sensor type
  *
  * @param sensor Sensor type
- * @param data Data type
- * @return Directory name
+ * @return Sensor name
  */
-const char *Measurements::getDirectory(SensorType sensor, DataType data)
+const char *Measurements::getSensorName(SensorType sensor)
 {
     assert(sensor < SensorType::Count);
+
+    const char *sensorName = sensorNames[static_cast<int>(sensor)];
+    return sensorName;
+}
+
+/**
+ * @brief Return the data name for specified data type
+ *
+ * @param data Data type
+ * @return Data name
+ */
+const char *Measurements::getDataName(DataType data)
+{
     assert(data < DataType::Count);
 
-    const char *name = directories[static_cast<int>(sensor)][static_cast<int>(data)];
-    return name;
+    const char *dataName = dataNames[static_cast<int>(data)];
+    return dataName;
 }

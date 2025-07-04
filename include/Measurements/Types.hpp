@@ -18,12 +18,17 @@ namespace Measurements
      */
     enum class SensorType : int
     {
-        Accel,
-        Gyro,
-        Angle,
+        AccelX,
+        AccelY,
+        AccelZ,
+        AccelResult,
+        GyroX,
+        GyroY,
+        GyroZ,
+        Roll,
+        Pitch,
         Adc1,
         Adc2,
-        AccelResult,
 
         Count
     };
@@ -41,11 +46,18 @@ namespace Measurements
     };
 
     /**
-     * @brief Return the directory name for specified sensor and data
+     * @brief Return the sensor name for specified sensor type
      *
      * @param sensor Sensor type
-     * @param data Data type
-     * @return Directory name
+     * @return Sensor name
      */
-    const char *getDirectory(SensorType sensor, DataType data);
+    const char *getSensorName(SensorType sensor);
+
+    /**
+     * @brief Return the data name for specified data type
+     *
+     * @param data Data type
+     * @return Data name
+     */
+    const char *getDataName(DataType data);
 } // namespace Measurements

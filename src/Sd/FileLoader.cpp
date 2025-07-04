@@ -47,7 +47,7 @@ namespace
     struct BinPacket
     {
         BinHeader header;
-        char buffer[5120];
+        char buffer[1024 * 4 + 100]; // 1024 (2^10) * 4 (sizeof(float)) + up to 100 extra bytes
     };
 #pragma pack(pop)
 
@@ -73,11 +73,12 @@ namespace
             dataType < Measurements::DataType::Count &&
             startTime > 0 && endFileId >= startFileId)
         {
-            char directory[30];
-            const char *sensorDataDir = Measurements::getDirectory(sensorType, dataType);
+            const char *sensorName = Measurements::getSensorName(sensorType);
+            const char *dataName = Measurements::getDataName(dataType);
 
+            char directory[30];
             SystemTime::epochToTimestamp(startTime, startTimeString);
-            snprintf(directory, sizeof(directory), "BIN/%s/%.8s", sensorDataDir, startTimeString);
+            snprintf(directory, sizeof(directory), "BIN/%s/%s/%.8s", dataName, sensorName, startTimeString);
 
             LOG_DEBUG("List \"%s\"", directory);
 
