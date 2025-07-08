@@ -61,13 +61,13 @@ namespace
     int endFileId = 0;
     BinPacket binPacket = {.header = {.magic = 0xFEDCBA98}};
     std::vector<FileInfo> downloadList;
-    int downloadChunkId = 0;
+    int downloadPacketId = 0;
 
     int getDownloadSize()
     {
         int downloadSize = 0;
         downloadList.clear();
-        downloadChunkId = 0;
+        downloadPacketId = 0;
 
         if (sensorType < Measurements::SensorType::Count &&
             dataType < Measurements::DataType::Count &&
@@ -132,38 +132,40 @@ namespace
                       sensorType, dataType, startTime, startFileId, endFileId);
         }
 
-        LOG_DEBUG("Files to download %d, total size %d", downloadList.size(), downloadSize);
+        LOG_DEBUG("Packets to download %d, total size %d", downloadList.size(), downloadSize);
 
         return downloadSize;
     }
 
-    void downloadDataChunk()
+    void downloadDataPacket()
     {
-        if (downloadChunkId >= downloadList.size())
+        if (downloadPacketId >= downloadList.size())
         {
-            downloadChunkId = downloadList.size() - 1;
+            downloadPacketId = downloadList.size() - 1;
         }
 
-        const auto &dataChunk = downloadList[downloadChunkId];
+        LOG_DEBUG("Download packet %d", downloadPacketId);
+
+        const auto &dataPacket = downloadList[downloadPacketId];
 
         SD::File sdFile;
-        bool result = sdFile.open(dataChunk.path);
+        bool result = sdFile.open(dataPacket.path);
         if (result == true)
         {
-            if (dataChunk.size == sdFile.size() && dataChunk.size <= sizeof(binPacket.buffer))
+            if (dataPacket.size == sdFile.size() && dataPacket.size <= sizeof(binPacket.buffer))
             {
-                result = sdFile.read(binPacket.buffer, dataChunk.size);
+                result = sdFile.read(binPacket.buffer, dataPacket.size);
                 if (result == true)
                 {
                     Serials::SerialDevice *serialDevice = Serials::Manager::getCommandSourceDevice();
                     if (serialDevice != nullptr)
                     {
                         FastCRC16 crc16;
-                        binPacket.header.crc16 = crc16.modbus((uint8_t *)binPacket.buffer, dataChunk.size);
-                        binPacket.header.length = dataChunk.size;
+                        binPacket.header.crc16 = crc16.modbus((uint8_t *)binPacket.buffer, dataPacket.size);
+                        binPacket.header.length = dataPacket.size;
 
                         const char *binData = (char *)&binPacket;
-                        size_t binSize = sizeof(BinHeader) + dataChunk.size;
+                        size_t binSize = sizeof(BinHeader) + dataPacket.size;
                         result = serialDevice->write(binData, binSize);
                         if (result != true)
                         {
@@ -177,19 +179,19 @@ namespace
                 }
                 else
                 {
-                    LOG_WARNING("File \"%s\" failed to read, size %d", dataChunk.path, dataChunk.size);
+                    LOG_WARNING("File \"%s\" failed to read, size %d", dataPacket.path, dataPacket.size);
                 }
             }
             else
             {
-                LOG_WARNING("File size %d error, buffer size %d", dataChunk.size, sizeof(binPacket.buffer));
+                LOG_WARNING("File size %d error, buffer size %d", dataPacket.size, sizeof(binPacket.buffer));
             }
 
             sdFile.close();
         }
         else
         {
-            LOG_WARNING("File \"%s\" failed to open", dataChunk.path);
+            LOG_WARNING("File \"%s\" failed to open", dataPacket.path);
         }
     }
 
@@ -214,8 +216,8 @@ namespace
         Serials::Manager::subscribeToRead(Serials::CommandId::AppDownloadData,
                                           [](const char **responseString)
                                           {
-                                              downloadDataChunk();
-                                              snprintf(dataString, sizeof(dataString), "%d", downloadChunkId);
+                                              downloadDataPacket();
+                                              snprintf(dataString, sizeof(dataString), "%d", downloadPacketId);
 
                                               *responseString = dataString;
                                           });
@@ -236,7 +238,8 @@ namespace
                                                if (recognized == 2)
                                                {
                                                    startTime = SystemTime::getTimestamp(startTimeString);
-                                                   LOG_DEBUG("Start time %ld, start file ID %d, end file ID %d", startTime, startFileId, endFileId);
+                                                   LOG_DEBUG("Download start time %ld, start packet %d, end packet %d",
+                                                             startTime, startFileId, endFileId);
                                                }
                                                else
                                                {
@@ -251,7 +254,8 @@ namespace
                                                int recognized = sscanf(dataString, "%ld,%d,%d", &startTime, &startFileId, &endFileId);
                                                if (recognized == 3)
                                                {
-                                                   LOG_DEBUG("Start time %ld, start file ID %d, end file ID %d", startTime, startFileId, endFileId);
+                                                   LOG_DEBUG("Download start time %ld, start packet %d, end packet %d",
+                                                             startTime, startFileId, endFileId);
                                                }
                                                else
                                                {
@@ -266,7 +270,7 @@ namespace
                                                int recognized = sscanf(dataString, "%d,%d", &sensorType, &dataType);
                                                if (recognized == 2)
                                                {
-                                                   LOG_DEBUG("Sensor type %d, data type %d", sensorType, dataType);
+                                                   LOG_DEBUG("Download sensor type %d, data type %d", sensorType, dataType);
                                                }
                                                else
                                                {
@@ -285,10 +289,10 @@ namespace
         Serials::Manager::subscribeToNotify(Serials::CommandId::AppDownloadNext,
                                             [](Serials::CommandType commandType)
                                             {
-                                                if (downloadChunkId < downloadList.size() - 1)
+                                                if (downloadPacketId < downloadList.size() - 1)
                                                 {
-                                                    downloadChunkId++;
-                                                    LOG_DEBUG("Switch to the next download chunk %d", downloadChunkId);
+                                                    downloadPacketId++;
+                                                    LOG_DEBUG("Switch to the next download packet %d", downloadPacketId);
                                                 }
                                             });
     }

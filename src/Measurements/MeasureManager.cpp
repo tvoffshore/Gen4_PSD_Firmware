@@ -152,29 +152,30 @@ namespace
     };
 
     /**
-     * @brief File header structure for measurements saving
+     * @brief Single measurements packet header structure
      */
-    struct FileHeader
+    struct PacketHeader
     {
         uint32_t startEpochTime;
-        uint32_t endEpochTime;
+        uint32_t durationMs;
         uint16_t sampleTimeMs;
         uint8_t dataType;
         uint8_t sensorType;
     };
 
     /**
-     * @brief Header structure for PSD measurements saving
+     * @brief PSD measurements header structure
      */
     struct PsdHeader
     {
         float coreFrequency;
         float coreAmplitude;
+        float deltaFrequency;
         uint32_t points;
     };
 
     /**
-     * @brief Data structure for Statistic measurements saving
+     * @brief Statistic measurements data structure
      */
     struct StatisticData
     {
@@ -216,7 +217,6 @@ namespace
         size_t sampleTimeMs;                // Interval between samples, milliseconds
         SystemTime::DateTime startDateTime; // Start measurements date and time
         time_t startEpochTime;              // Start measurements epoch time
-        time_t endEpochTime;                // End of measurements epoch time
         MeasureSettings config;             // Current measurements configuration
 
         /**
@@ -243,7 +243,6 @@ namespace
 
             // Obtain measurements start date and time
             startEpochTime = SystemTime::getDateTime(startDateTime);
-            endEpochTime = 0;
 
             LOG_INFO("Setup: sensors %u, data type %u, segment %d samples, sample time %d ms, segment time %d ms",
                      config.sensorMask, config.dataTypeMask, segmentSize, sampleTimeMs, segmentTimeMs);
@@ -326,7 +325,7 @@ namespace
     void processMeasurements(size_t index);
     void calculateAccelResult(const int16_t *pAccX, const int16_t *pAccY, size_t length);
     void saveMeasurements();
-    bool savePsdFile(SensorType sensorType, const PsdBin &coreBin, const float *psd, size_t points);
+    bool savePsdFile(SensorType sensorType, const PsdResult &psdResult, size_t points);
     bool saveStatisticFile(SensorType sensorType, const StatisticData &data);
 
     // Sampling process functions
@@ -779,9 +778,6 @@ namespace
         // Check if at least one segment is ready
         if (context.segmentCount > 0)
         {
-            size_t durationMs = context.segmentCount * context.segmentTimeMs;
-            context.endEpochTime = context.startEpochTime + durationMs / millisPerSecond;
-
             // Save measurements to the storage
             saveMeasurements();
         }
@@ -1098,22 +1094,6 @@ namespace
      */
     void saveMeasurements()
     {
-        PsdBin coreBinAdc1;
-        PsdBin coreBinAdc2;
-        PsdBin coreBinAccX;
-        PsdBin coreBinAccY;
-        PsdBin coreBinGyroX;
-        PsdBin coreBinGyroY;
-        PsdBin coreBinAccResult;
-
-        const float *resultPsdAdc1 = nullptr;
-        const float *resultPsdAdc2 = nullptr;
-        const float *resultPsdAccX = nullptr;
-        const float *resultPsdAccY = nullptr;
-        const float *resultPsdGyroX = nullptr;
-        const float *resultPsdGyroY = nullptr;
-        const float *resultPsdAccResult = nullptr;
-
         // If 𝑁 is even (segmentSize = 2^N), you have 𝑁/2+1 useful components
         // because the symmetric part of the FFT spectrum for real-valued signals
         // does not provide additional information beyond the Nyquist frequency
@@ -1134,45 +1114,38 @@ namespace
         {
             if (context.config.sensorMask & SensorMask::Adc1)
             {
-                resultPsdAdc1 = psdAdc1.getResult(&coreBinAdc1);
                 // BIN/PSD/ADC1
-                savePsdFile(SensorType::Adc1, coreBinAdc1, resultPsdAdc1, resultPoints);
+                savePsdFile(SensorType::Adc1, psdAdc1.getResult(), resultPoints);
             }
 
             if (context.config.sensorMask & SensorMask::Adc2)
             {
-                resultPsdAdc2 = psdAdc2.getResult(&coreBinAdc2);
                 // BIN/PSD/ADC2
-                savePsdFile(SensorType::Adc2, coreBinAdc2, resultPsdAdc2, resultPoints);
+                savePsdFile(SensorType::Adc2, psdAdc2.getResult(), resultPoints);
             }
 
             if (context.config.sensorMask & SensorMask::Accel)
             {
-                resultPsdAccX = psdAccX.getResult(&coreBinAccX);
                 // BIN/PSD/ACC_X
-                savePsdFile(SensorType::AccelX, coreBinAccX, resultPsdAccX, resultPoints);
+                savePsdFile(SensorType::AccelX, psdAccX.getResult(), resultPoints);
 
-                resultPsdAccY = psdAccY.getResult(&coreBinAccY);
                 // BIN/PSD/ACC_Y
-                savePsdFile(SensorType::AccelY, coreBinAccY, resultPsdAccY, resultPoints);
+                savePsdFile(SensorType::AccelY, psdAccY.getResult(), resultPoints);
             }
 
             if (context.config.sensorMask & SensorMask::Gyro)
             {
-                resultPsdGyroX = psdGyroX.getResult(&coreBinGyroX);
                 // BIN/PSD/GYR_X
-                savePsdFile(SensorType::GyroX, coreBinGyroX, resultPsdGyroX, resultPoints);
+                savePsdFile(SensorType::GyroX, psdGyroX.getResult(), resultPoints);
 
-                resultPsdGyroY = psdGyroY.getResult(&coreBinGyroY);
                 // BIN/PSD/GYR_Y
-                savePsdFile(SensorType::GyroY, coreBinGyroY, resultPsdGyroY, resultPoints);
+                savePsdFile(SensorType::GyroY, psdGyroY.getResult(), resultPoints);
             }
 
             if (context.config.sensorMask & SensorMask::AccelResult)
             {
-                resultPsdAccResult = psdAccResult.getResult(&coreBinAccResult);
                 // BIN/PSD/ACC_RES
-                savePsdFile(SensorType::AccelResult, coreBinAccResult, resultPsdAccResult, resultPoints);
+                savePsdFile(SensorType::AccelResult, psdAccResult.getResult(), resultPoints);
             }
         }
 
@@ -1342,13 +1315,15 @@ namespace
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
                 {
-                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinAdc1.frequency, coreBinAdc1.amplitude);
+                    const PsdResult &psdResult = psdAdc1.getResult();
+                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
+                             psdResult.coreFrequency, psdResult.coreAmplitude);
                     sdFile.println(string);
                     snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
                     sdFile.print(string);
                     for (size_t idx = 0; idx < resultPoints; idx++)
                     {
-                        snprintf(string, sizeof(string), ",%G", resultPsdAdc1[idx]);
+                        snprintf(string, sizeof(string), ",%G", psdResult.bins[idx]);
                         sdFile.print(string);
                     }
                     sdFile.println(""); // End of PSD
@@ -1373,13 +1348,15 @@ namespace
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
                 {
-                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinAdc2.frequency, coreBinAdc2.amplitude);
+                    const PsdResult &psdResult = psdAdc2.getResult();
+                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
+                             psdResult.coreFrequency, psdResult.coreAmplitude);
                     sdFile.println(string);
                     snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
                     sdFile.print(string);
                     for (size_t idx = 0; idx < resultPoints; idx++)
                     {
-                        snprintf(string, sizeof(string), ",%G", resultPsdAdc2[idx]);
+                        snprintf(string, sizeof(string), ",%G", psdResult.bins[idx]);
                         sdFile.print(string);
                     }
                     sdFile.println(""); // End of PSD
@@ -1404,13 +1381,15 @@ namespace
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
                 {
-                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinAccX.frequency, coreBinAccX.amplitude);
+                    const PsdResult &psdResult = psdAccX.getResult();
+                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
+                             psdResult.coreFrequency, psdResult.coreAmplitude);
                     sdFile.println(string);
                     snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
                     sdFile.print(string);
                     for (size_t idx = 0; idx < resultPoints; idx++)
                     {
-                        snprintf(string, sizeof(string), ",%G", resultPsdAccX[idx]);
+                        snprintf(string, sizeof(string), ",%G", psdResult.bins[idx]);
                         sdFile.print(string);
                     }
                     sdFile.println(""); // End of PSD
@@ -1432,13 +1411,15 @@ namespace
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
                 {
-                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinAccY.frequency, coreBinAccY.amplitude);
+                    const PsdResult &psdResult = psdAccY.getResult();
+                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
+                             psdResult.coreFrequency, psdResult.coreAmplitude);
                     sdFile.println(string);
                     snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
                     sdFile.print(string);
                     for (size_t idx = 0; idx < resultPoints; idx++)
                     {
-                        snprintf(string, sizeof(string), ",%G", resultPsdAccY[idx]);
+                        snprintf(string, sizeof(string), ",%G", psdResult.bins[idx]);
                         sdFile.print(string);
                     }
                     sdFile.println(""); // End of PSD
@@ -1478,13 +1459,15 @@ namespace
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
                 {
-                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinGyroX.frequency, coreBinGyroX.amplitude);
+                    const PsdResult &psdResult = psdGyroX.getResult();
+                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
+                             psdResult.coreFrequency, psdResult.coreAmplitude);
                     sdFile.println(string);
                     snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
                     sdFile.print(string);
                     for (size_t idx = 0; idx < resultPoints; idx++)
                     {
-                        snprintf(string, sizeof(string), ",%G", resultPsdGyroX[idx]);
+                        snprintf(string, sizeof(string), ",%G", psdResult.bins[idx]);
                         sdFile.print(string);
                     }
                     sdFile.println(""); // End of PSD
@@ -1506,13 +1489,15 @@ namespace
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
                 {
-                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinGyroY.frequency, coreBinGyroY.amplitude);
+                    const PsdResult &psdResult = psdGyroY.getResult();
+                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
+                             psdResult.coreFrequency, psdResult.coreAmplitude);
                     sdFile.println(string);
                     snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
                     sdFile.print(string);
                     for (size_t idx = 0; idx < resultPoints; idx++)
                     {
-                        snprintf(string, sizeof(string), ",%G", resultPsdGyroY[idx]);
+                        snprintf(string, sizeof(string), ",%G", psdResult.bins[idx]);
                         sdFile.print(string);
                     }
                     sdFile.println(""); // End of PSD
@@ -1585,13 +1570,15 @@ namespace
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
                 {
-                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize, coreBinAccResult.frequency, coreBinAccResult.amplitude);
+                    const PsdResult &psdResult = psdAccResult.getResult();
+                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
+                             psdResult.coreFrequency, psdResult.coreAmplitude);
                     sdFile.println(string);
                     snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
                     sdFile.print(string);
                     for (size_t idx = 0; idx < resultPoints; idx++)
                     {
-                        snprintf(string, sizeof(string), ",%G", resultPsdAccResult[idx]);
+                        snprintf(string, sizeof(string), ",%G", psdResult.bins[idx]);
                         sdFile.print(string);
                     }
                     sdFile.println(""); // End of PSD
@@ -1610,20 +1597,18 @@ namespace
      * @brief Save PSD measurements to file on SD
      *
      * @param sensorType Type of sensor
-     * @param coreBin PSD core bin info
-     * @param psd PSD points
+     * @param psdResult PSD results structure
      * @param points Number of PSD points
      * @return true if PSD was saved successfully, false otherwise
      */
-    bool savePsdFile(SensorType sensorType, const PsdBin &coreBin, const float *psd, size_t points)
+    bool savePsdFile(SensorType sensorType, const PsdResult &psdResult, size_t points)
     {
-        assert(psd);
         assert(points > 0);
 
         const char *sensorName = getSensorName(sensorType);
         const char *dataName = getDataName(DataType::Psd);
-        LOG_DEBUG("Save %s %s: core bin %lfHz - %lf, points %d",
-                  sensorName, dataName, coreBin.frequency, coreBin.amplitude, points);
+        LOG_DEBUG("Save %s %s: core bin %lfHz - %lf, points %d, delta %fHz", sensorName, dataName,
+                  psdResult.coreFrequency, psdResult.coreAmplitude, points, psdResult.deltaFrequency);
 
         char fileName[30];
         char directory[30];
@@ -1636,21 +1621,22 @@ namespace
         bool result = sdFile.create(directory, fileName, fileExtensionBin);
         if (result == true)
         {
-            FileHeader fileHeader = {
+            PacketHeader packetHeader = {
                 .startEpochTime = static_cast<uint32_t>(context.startEpochTime),
-                .endEpochTime = static_cast<uint32_t>(context.endEpochTime),
+                .durationMs = static_cast<uint32_t>(context.segmentCount * context.segmentTimeMs),
                 .sampleTimeMs = static_cast<uint16_t>(context.sampleTimeMs),
                 .dataType = static_cast<uint8_t>(DataType::Psd),
                 .sensorType = static_cast<uint8_t>(sensorType),
             };
 
-            // Save file header
-            result = sdFile.write(&fileHeader, sizeof(fileHeader));
+            // Save packet header
+            result = sdFile.write(&packetHeader, sizeof(packetHeader));
             if (result == true)
             {
                 PsdHeader psdHeader = {
-                    .coreFrequency = coreBin.frequency,
-                    .coreAmplitude = coreBin.amplitude,
+                    .coreFrequency = psdResult.coreFrequency,
+                    .coreAmplitude = psdResult.coreAmplitude,
+                    .deltaFrequency = psdResult.deltaFrequency,
                     .points = points,
                 };
 
@@ -1658,8 +1644,8 @@ namespace
                 result = sdFile.write(&psdHeader, sizeof(psdHeader));
                 if (result == true)
                 {
-                    // Save PSD points
-                    result = sdFile.write(psd, points * sizeof(*psd));
+                    // Save PSD amplitude array
+                    result = sdFile.write(psdResult.bins, points * sizeof(*psdResult.bins));
                 }
             }
 
@@ -1694,16 +1680,16 @@ namespace
         bool result = sdFile.create(directory, fileName, fileExtensionBin);
         if (result == true)
         {
-            FileHeader fileHeader = {
+            PacketHeader packetHeader = {
                 .startEpochTime = static_cast<uint32_t>(context.startEpochTime),
-                .endEpochTime = static_cast<uint32_t>(context.endEpochTime),
+                .durationMs = static_cast<uint32_t>(context.segmentCount * context.segmentTimeMs),
                 .sampleTimeMs = static_cast<uint16_t>(context.sampleTimeMs),
                 .dataType = static_cast<uint8_t>(DataType::Statistic),
                 .sensorType = static_cast<uint8_t>(sensorType),
             };
 
-            // Save file header
-            result = sdFile.write(&fileHeader, sizeof(fileHeader));
+            // Save packet header
+            result = sdFile.write(&packetHeader, sizeof(packetHeader));
             if (result == true)
             {
                 // Save Statistic data

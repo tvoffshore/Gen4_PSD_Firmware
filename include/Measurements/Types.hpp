@@ -16,7 +16,7 @@ namespace Measurements
     /**
      * @brief Sensor type identifiers
      */
-    enum class SensorType : int
+    enum class SensorType
     {
         AccelX,
         AccelY,
@@ -36,7 +36,7 @@ namespace Measurements
     /**
      * @brief Data type identifiers
      */
-    enum class DataType : int
+    enum class DataType
     {
         Psd,
         Statistic,

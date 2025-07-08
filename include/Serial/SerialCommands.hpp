@@ -60,8 +60,8 @@ namespace Serials
         AppDownloadHistory, // 25: Set download range starting from timestamp
         AppDownloadType,    // 26: Set download data type
         AppDownloadSize,    // 27: Get download data size in bytes
-        AppDownloadData,    // 28: Get current download data chunk
-        AppDownloadNext,    // 29: Switch to the next download data chunk
+        AppDownloadData,    // 28: Get current download data packet
+        AppDownloadNext,    // 29: Switch to the next download data packet
 
         Commands // Total number of serial commands
     };

@@ -21,12 +21,14 @@ namespace Measurements
     constexpr size_t samplesCountMax = 1024;
 
     /**
-     * @brief PSD bin information structure
+     * @brief PSD results structure
      */
-    struct PsdBin
+    struct PsdResult
     {
-        float frequency;
-        float amplitude;
+        float coreFrequency;
+        float coreAmplitude;
+        float deltaFrequency;
+        const float *bins;
     };
 
     template <typename Type>
@@ -52,10 +54,9 @@ namespace Measurements
          * @brief Return PSD results
          * Reset accumulated segment count (finish previous segments computing) if there are any segments
          *
-         * @param[out] coreBin Pointer to the core (maximum amplitude) bin in the results (nullptr if no need)
-         * @return Calculated bins
+         * @return Pointer to PSD results structure
          */
-        const float *getResult(PsdBin *pCoreBin = nullptr);
+        const PsdResult &getResult();
 
     private:
         /**
@@ -68,7 +69,7 @@ namespace Measurements
         size_t _segmentCount;    // Number of computed segments
         size_t _binCount;        // Number of bins
 
-        PsdBin _coreBin; // Core (maximum amplitude) bin
+        PsdResult _result; // PSD results
 
         float _bins[samplesCountMax / 2 + 1]; // PSD results (only the first N/2 + 1 are usefull, where N = sampleCount)
     };

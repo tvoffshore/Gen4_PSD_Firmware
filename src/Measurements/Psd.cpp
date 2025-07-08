@@ -121,11 +121,10 @@ void PSD<Type>::computeSegment(const Type *samples)
  * @brief Return PSD results
  * Reset accumulated segment count (finish previous segments computing) if there are any segments
  *
- * @param[out] pCoreBin Pointer to the core (maximum amplitude) bin in the results (nullptr if no need)
- * @return Calculated bins
+ * @return Pointer to PSD results structure
  */
 template <typename Type>
-const float *PSD<Type>::getResult(PsdBin *pCoreBin)
+const PsdResult &PSD<Type>::getResult()
 {
     if (_segmentCount > 0)
     {
@@ -149,20 +148,16 @@ const float *PSD<Type>::getResult(PsdBin *pCoreBin)
             LOG_TRACE("Bin[%d]: %lf", idx, _bins[idx]);
         }
 
-        float deltaFrequency = static_cast<float>(_sampleFrequency) / _sampleCount;
-        _coreBin.frequency = binMaxIdx * deltaFrequency;
-        _coreBin.amplitude = binMaxAmplitude;
+        _result.deltaFrequency = static_cast<float>(_sampleFrequency) / _sampleCount;
+        _result.coreFrequency = binMaxIdx * _result.deltaFrequency;
+        _result.coreAmplitude = binMaxAmplitude;
+        _result.bins = _bins;
 
         // Reset number of segment to prevent repeated result calculation
         _segmentCount = 0;
     }
 
-    if (pCoreBin != nullptr)
-    {
-        *pCoreBin = _coreBin;
-    }
-
-    return _bins;
+    return _result;
 }
 
 /**
