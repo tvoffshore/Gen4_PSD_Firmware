@@ -139,13 +139,18 @@ namespace
 
     void downloadDataPacket()
     {
+        if (downloadList.empty())
+        {
+            LOG_ERROR("Packet list is empty to download");
+            return;
+        }
+
         if (downloadPacketId >= downloadList.size())
         {
             downloadPacketId = downloadList.size() - 1;
         }
 
         LOG_DEBUG("Download packet %d", downloadPacketId);
-
         const auto &dataPacket = downloadList[downloadPacketId];
 
         SD::File sdFile;
@@ -277,24 +282,21 @@ namespace
                                                    LOG_WARNING("Parse Download type command filed");
                                                }
                                            });
-    }
 
-    /**
-     * @brief Register to serial commands notifictions
-     */
-    void registerSerialCommandNotifications()
-    {
-        LOG_DEBUG("Register serial command file loader notifications");
-
-        Serials::Manager::subscribeToNotify(Serials::CommandId::AppDownloadNext,
-                                            [](Serials::CommandType commandType)
-                                            {
-                                                if (downloadPacketId < downloadList.size() - 1)
-                                                {
-                                                    downloadPacketId++;
-                                                    LOG_DEBUG("Switch to the next download packet %d", downloadPacketId);
-                                                }
-                                            });
+        Serials::Manager::subscribeToWrite(Serials::CommandId::AppDownloadId,
+                                           [](const char *dataString)
+                                           {
+                                               // "ID"
+                                               int recognized = sscanf(dataString, "%d", &downloadPacketId);
+                                               if (recognized == 1)
+                                               {
+                                                   LOG_DEBUG("Download next packet ID %d", downloadPacketId);
+                                               }
+                                               else
+                                               {
+                                                   LOG_WARNING("Parse Download packet ID command filed");
+                                               }
+                                           });
     }
 } // namespace
 
@@ -306,5 +308,4 @@ void FileLoader::initialize()
     // Register local serial handlers
     registerSerialReadHandlers();
     registerSerialWriteHandlers();
-    registerSerialCommandNotifications();
 }

@@ -255,6 +255,12 @@ void registerSerialCommandNotifications()
                                             appKeepAliveHandler();
                                         });
 
+    Serials::Manager::subscribeToNotify(Serials::CommandId::AppDownloadId,
+                                        [](Serials::CommandType commandType)
+                                        {
+                                            appKeepAliveHandler();
+                                        });
+
     Serials::Manager::subscribeToNotify(Serials::CommandId::AppDownloadSize,
                                         [](Serials::CommandType commandType)
                                         {
@@ -262,12 +268,6 @@ void registerSerialCommandNotifications()
                                         });
 
     Serials::Manager::subscribeToNotify(Serials::CommandId::AppDownloadData,
-                                        [](Serials::CommandType commandType)
-                                        {
-                                            appKeepAliveHandler();
-                                        });
-
-    Serials::Manager::subscribeToNotify(Serials::CommandId::AppDownloadNext,
                                         [](Serials::CommandType commandType)
                                         {
                                             appKeepAliveHandler();
