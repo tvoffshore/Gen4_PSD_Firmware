@@ -19,7 +19,7 @@ namespace
     /* Major firmware version value */
     constexpr unsigned int FW_VERSION_MAJOR = 0;
     /* Minor firmware version value */
-    constexpr unsigned int FW_VERSION_MINOR = 3;
+    constexpr unsigned int FW_VERSION_MINOR = 4;
 
     // MAJOR(2) + .(1) + MINOR(2) < 6
     constexpr size_t fwStringLength = 6;
