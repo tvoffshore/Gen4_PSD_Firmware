@@ -1153,119 +1153,119 @@ namespace
         {
             if (context.config.sensorMask & SensorMask::Adc1)
             {
-                StatisticData data = {
+                StatisticData dataAdc1 = {
                     .max = static_cast<float>(statisticAdc1.max()),
                     .min = static_cast<float>(statisticAdc1.min()),
                     .mean = statisticAdc1.mean(),
                     .deviation = statisticAdc1.deviation(),
                 };
                 // BIN/STAT/ADC1
-                saveStatisticFile(SensorType::Adc1, data);
+                saveStatisticFile(SensorType::Adc1, dataAdc1);
             }
 
             if (context.config.sensorMask & SensorMask::Adc2)
             {
-                StatisticData data = {
+                StatisticData dataAdc2 = {
                     .max = static_cast<float>(statisticAdc2.max()),
                     .min = static_cast<float>(statisticAdc2.min()),
                     .mean = statisticAdc2.mean(),
                     .deviation = statisticAdc2.deviation(),
                 };
                 // BIN/STAT/ADC2
-                saveStatisticFile(SensorType::Adc2, data);
+                saveStatisticFile(SensorType::Adc2, dataAdc2);
             }
 
             if (context.config.sensorMask & SensorMask::Accel)
             {
-                StatisticData dataX = {
+                StatisticData dataAccelX = {
                     .max = static_cast<float>(statisticAccX.max()),
                     .min = static_cast<float>(statisticAccX.min()),
                     .mean = statisticAccX.mean(),
                     .deviation = statisticAccX.deviation(),
                 };
                 // BIN/STAT/ACC_X
-                saveStatisticFile(SensorType::AccelX, dataX);
+                saveStatisticFile(SensorType::AccelX, dataAccelX);
 
-                StatisticData dataY = {
+                StatisticData dataAccelY = {
                     .max = static_cast<float>(statisticAccY.max()),
                     .min = static_cast<float>(statisticAccY.min()),
                     .mean = statisticAccY.mean(),
                     .deviation = statisticAccY.deviation(),
                 };
                 // BIN/STAT/ACC_Y
-                saveStatisticFile(SensorType::AccelY, dataY);
+                saveStatisticFile(SensorType::AccelY, dataAccelY);
 
-                StatisticData dataZ = {
+                StatisticData dataAccelZ = {
                     .max = static_cast<float>(statisticAccZ.max()),
                     .min = static_cast<float>(statisticAccZ.min()),
                     .mean = statisticAccZ.mean(),
                     .deviation = statisticAccZ.deviation(),
                 };
                 // BIN/STAT/ACC_Z
-                saveStatisticFile(SensorType::AccelZ, dataZ);
+                saveStatisticFile(SensorType::AccelZ, dataAccelZ);
             }
 
             if (context.config.sensorMask & SensorMask::Gyro)
             {
-                StatisticData dataX = {
+                StatisticData dataGyroX = {
                     .max = static_cast<float>(statisticGyroX.max()),
                     .min = static_cast<float>(statisticGyroX.min()),
                     .mean = statisticGyroX.mean(),
                     .deviation = statisticGyroX.deviation(),
                 };
                 // BIN/STAT/GYR_X
-                saveStatisticFile(SensorType::GyroX, dataX);
+                saveStatisticFile(SensorType::GyroX, dataGyroX);
 
-                StatisticData dataY = {
+                StatisticData dataGyroY = {
                     .max = static_cast<float>(statisticGyroY.max()),
                     .min = static_cast<float>(statisticGyroY.min()),
                     .mean = statisticGyroY.mean(),
                     .deviation = statisticGyroY.deviation(),
                 };
                 // BIN/STAT/GYR_Y
-                saveStatisticFile(SensorType::GyroY, dataX);
+                saveStatisticFile(SensorType::GyroY, dataGyroY);
 
-                StatisticData dataZ = {
+                StatisticData dataGyroZ = {
                     .max = static_cast<float>(statisticGyroZ.max()),
                     .min = static_cast<float>(statisticGyroZ.min()),
                     .mean = statisticGyroZ.mean(),
                     .deviation = statisticGyroZ.deviation(),
                 };
                 // BIN/STAT/GYR_Z
-                saveStatisticFile(SensorType::GyroZ, dataZ);
+                saveStatisticFile(SensorType::GyroZ, dataGyroZ);
             }
 
             if (context.config.sensorMask & SensorMask::Angle)
             {
-                StatisticData dataRoll = {
+                StatisticData dataAngleRoll = {
                     .max = statisticRoll.max(),
                     .min = statisticRoll.min(),
                     .mean = statisticRoll.mean(),
                     .deviation = statisticRoll.deviation(),
                 };
                 // BIN/STAT/ROLL
-                saveStatisticFile(SensorType::Roll, dataRoll);
+                saveStatisticFile(SensorType::Roll, dataAngleRoll);
 
-                StatisticData dataPitch = {
+                StatisticData dataAnglePitch = {
                     .max = statisticPitch.max(),
                     .min = statisticPitch.min(),
                     .mean = statisticPitch.mean(),
                     .deviation = statisticPitch.deviation(),
                 };
                 // BIN/STAT/PITCH
-                saveStatisticFile(SensorType::Pitch, dataPitch);
+                saveStatisticFile(SensorType::Pitch, dataAnglePitch);
             }
 
             if (context.config.sensorMask & SensorMask::AccelResult)
             {
-                StatisticData data = {
+                StatisticData dataAccelResult = {
                     .max = statisticAccResult.max(),
                     .min = statisticAccResult.min(),
                     .mean = statisticAccResult.mean(),
                     .deviation = statisticAccResult.deviation(),
                 };
                 // BIN/STAT/ACC_RES
-                saveStatisticFile(SensorType::AccelResult, data);
+                saveStatisticFile(SensorType::AccelResult, dataAccelResult);
             }
         }
 
