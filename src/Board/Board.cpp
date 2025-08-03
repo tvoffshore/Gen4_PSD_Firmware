@@ -130,7 +130,11 @@ void Board::setupUSB()
  */
 void Board::setupI2C()
 {
-    Wire.begin(I2cConfig::pinSda, I2cConfig::pinScl, I2cConfig::frequency);
+    bool result = Wire.begin(I2cConfig::pinSda, I2cConfig::pinScl, I2cConfig::frequency);
+    if (result == false)
+    {
+        LOG_ERROR("I2C setup failed");
+    }
 }
 
 /**

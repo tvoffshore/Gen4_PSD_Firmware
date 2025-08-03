@@ -27,20 +27,21 @@ namespace Board
     // I2C interface configuration
     namespace I2cConfig
     {
-        constexpr uint32_t frequency = 100000; // 100kHz
-        constexpr auto pinSda = GPIO_NUM_34;   // I2C SDA pin
-        constexpr auto pinScl = GPIO_NUM_33;   // I2C SCL pin
+        // Maximum I2C SCL frequency (100 kHz)
+        constexpr uint32_t frequency = 100 * 1000;
+        constexpr auto pinSda = GPIO_NUM_34; // I2C SDA pin
+        constexpr auto pinScl = GPIO_NUM_33; // I2C SCL pin
     } // namespace I2C
 
     // SPI interface configuration
     namespace SpiConfig
     {
-        // Maximum SPI SCK frequency
-        constexpr uint32_t frequency = 20000000; // 20MHz
-        constexpr auto pinSck = GPIO_NUM_1;      // SPI clock pin
-        constexpr auto pinMosi = GPIO_NUM_47;    // SPI MOSI pin
-        constexpr auto pinMiso = GPIO_NUM_48;    // SPI MISO pin
-        constexpr auto pinCsSd = GPIO_NUM_26;    // SPI chip select for SD pin
+        // Maximum SPI SCK frequency (20 MHz)
+        constexpr uint32_t frequency = 20 * 1000 * 1000;
+        constexpr auto pinSck = GPIO_NUM_1;   // SPI clock pin
+        constexpr auto pinMosi = GPIO_NUM_47; // SPI MOSI pin
+        constexpr auto pinMiso = GPIO_NUM_48; // SPI MISO pin
+        constexpr auto pinCsSd = GPIO_NUM_26; // SPI chip select for SD pin
     } // namespace SpiConfig
 
     /**
