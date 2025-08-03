@@ -17,7 +17,72 @@ namespace SystemTime
         constexpr uint32_t epochYear = 1970;
         constexpr uint8_t monthCount = 12;
 
+        // Interval to sync system time with RTC, seconds
+        constexpr time_t rtcSyncIntervalSec = 5 * 60;
+
         TwoWire *pWire = nullptr; // Reference to I2C device
+
+        /**
+         * @brief Get current RTC time (number of seconds that have elapsed since January 1, 1970)
+         *
+         * @return RTC time if operation succeed, 0 otherwise
+         */
+        time_t getRtcTime()
+        {
+            if (pWire == nullptr)
+            {
+                return 0;
+            }
+
+            time_t time = 0;
+
+            // Load RTC time
+            bool result = RTC::getTime(*pWire, time);
+            if (result == true)
+            {
+                char timeString[32];
+                ctime_r(&time, timeString);
+                LOG_DEBUG("Get RTC time: %.*s", strlen(timeString) - 1, timeString);
+            }
+            else
+            {
+                LOG_ERROR("Get RTC time failed!");
+            }
+
+            return time;
+        }
+
+        /**
+         * @brief Set new time to RTC
+         *
+         * @param[in] time Epoch time (number of seconds that have elapsed since January 1, 1970)
+         * @return true if operation succeed, false otherwise
+         */
+        bool setRtcTime(time_t time)
+        {
+            if (pWire == nullptr)
+            {
+                return false;
+            }
+
+            // Update RTC time
+            bool result = RTC::setTime(*pWire, time);
+            if (result == true)
+            {
+                char timeString[32];
+                ctime_r(&time, timeString);
+                LOG_INFO("Set RTC time to %.*s", strlen(timeString) - 1, timeString);
+            }
+            else
+            {
+                LOG_ERROR("Set RTC time failed!");
+            }
+
+            // Update system time
+            setTime(time);
+
+            return result;
+        }
 
         /**
          * @brief Provide time from RTC for synchronization
@@ -89,85 +154,14 @@ namespace SystemTime
      *
      * @param[in] wire Reference to the wire interface object for RTC
      */
-    bool initialize(TwoWire &wire)
+    void initialize(TwoWire &wire)
     {
-        LOG_DEBUG("Initialize system time...");
+        LOG_INFO("Initialize system time");
 
         pWire = &wire;
 
-        time_t time;
-        bool result = getEpochTime(time);
-        if (result == true)
-        {
-            setSyncProvider(syncProvider);
-
-            DateTimeString string;
-            epochToTimestamp(time, string);
-            LOG_INFO("System time initialized: time since epoch %d - %s", time, string);
-        }
-
-        return result;
-    }
-
-    /**
-     * @brief Get current epoch time (number of seconds that have elapsed since January 1, 1970)
-     *
-     * @param[out] time Epoch time
-     * @return true if operation succeed, false otherwise
-     */
-    bool getEpochTime(time_t &time)
-    {
-        if (pWire == nullptr)
-        {
-            return false;
-        }
-
-        // Load RTC time
-        bool result = RTC::getTime(*pWire, time);
-        if (result == true)
-        {
-            char timeString[32];
-            ctime_r(&time, timeString);
-            LOG_INFO("RTC time is %.*s", strlen(timeString) - 1, timeString);
-        }
-        else
-        {
-            LOG_ERROR("Get RTC time failed!");
-        }
-
-        return result;
-    }
-
-    /**
-     * @brief Set new epoch time (number of seconds that have elapsed since January 1, 1970)
-     *
-     * @param[in] time Epoch time
-     * @return true if operation succeed, false otherwise
-     */
-    bool setEpochTime(time_t time)
-    {
-        if (pWire == nullptr)
-        {
-            return false;
-        }
-
-        // Update RTC time
-        bool result = RTC::setTime(*pWire, time);
-        if (result == true)
-        {
-            char timeString[32];
-            ctime_r(&time, timeString);
-            LOG_INFO("Set RTC time to %.*s", strlen(timeString) - 1, timeString);
-        }
-        else
-        {
-            LOG_ERROR("Set RTC time failed!");
-        }
-
-        // Update system time
-        setTime(time);
-
-        return result;
+        setSyncProvider(getRtcTime);
+        setSyncInterval(rtcSyncIntervalSec);
     }
 
     /**
@@ -226,7 +220,7 @@ namespace SystemTime
                 tm.Minute = minute();
                 tm.Second = second();
 
-                result = setEpochTime(makeTime(tm));
+                result = setRtcTime(makeTime(tm));
             }
         }
 
@@ -259,17 +253,30 @@ namespace SystemTime
             tm.Month = month();
             tm.Year = CalendarYrToTm(year());
 
-            result = setEpochTime(makeTime(tm));
+            result = setRtcTime(makeTime(tm));
         }
 
         return result;
     }
 
     /**
-     * @brief Get current date and time
+     * @brief Get current epoch time
      *
-     * @param dateTime Current date and time
-     * @return Epoch time
+     * @return Epoch time (number of seconds that have elapsed since January 1, 1970)
+     */
+    time_t getEpochTime()
+    {
+        // Read current epoch time
+        time_t time = now();
+
+        return time;
+    }
+
+    /**
+     * @brief Get current date and time structure
+     *
+     * @param dateTime Date and time structure
+     * @return Epoch time (number of seconds that have elapsed since January 1, 1970)
      */
     time_t getDateTime(DateTime &dateTime)
     {
@@ -291,10 +298,10 @@ namespace SystemTime
     }
 
     /**
-     * @brief Get current date and time packed to human-readable timestamp string
+     * @brief Get current human-readable timestamp string
      *
-     * @param[in] string String with timestamp
-     * @return Epoch time
+     * @param[in] string Human-readable timestamp string
+     * @return Epoch time (number of seconds that have elapsed since January 1, 1970)
      */
     time_t getTimestamp(DateTimeString &string)
     {
@@ -313,8 +320,8 @@ namespace SystemTime
     /**
      * @brief Convert epoch time to human-readable timestamp string
      *
-     * @param epochTime Epoch time
-     * @param string human-readable string with time
+     * @param epochTime Epoch time (number of seconds that have elapsed since January 1, 1970)
+     * @param string Human-readable timestamp string
      */
     void epochToTimestamp(time_t epochTime, DateTimeString &string)
     {

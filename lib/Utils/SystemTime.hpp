@@ -43,23 +43,7 @@ namespace SystemTime
      *
      * @param[in] wire Reference to the wire interface object for RTC
      */
-    bool initialize(TwoWire &wire);
-
-    /**
-     * @brief Get current epoch time (number of seconds that have elapsed since January 1, 1970)
-     *
-     * @param[out] time Epoch time
-     * @return true if operation succeed, false otherwise
-     */
-    bool getEpochTime(time_t &time);
-
-    /**
-     * @brief Set new epoch time (number of seconds that have elapsed since January 1, 1970)
-     *
-     * @param[in] time Epoch time
-     * @return true if operation succeed, false otherwise
-     */
-    bool setEpochTime(time_t time);
+    void initialize(TwoWire &wire);
 
     /**
      * @brief Get current date packed to human-readable string
@@ -92,26 +76,33 @@ namespace SystemTime
     bool setStringTime(const TimeString &string);
 
     /**
-     * @brief Get current date and time
+     * @brief Get current epoch time
      *
-     * @param dateTime Current date and time
-     * @return Epoch time
+     * @return Epoch time (number of seconds that have elapsed since January 1, 1970)
+     */
+    time_t getEpochTime();
+
+    /**
+     * @brief Get current date and time structure
+     *
+     * @param dateTime Date and time structure
+     * @return Epoch time (number of seconds that have elapsed since January 1, 1970)
      */
     time_t getDateTime(DateTime &dateTime);
 
     /**
-     * @brief Get current date and time packed to human-readable timestamp string
+     * @brief Get current human-readable timestamp string
      *
-     * @param[in] string String with timestamp
-     * @return Epoch time
+     * @param[in] string Human-readable timestamp string
+     * @return Epoch time (number of seconds that have elapsed since January 1, 1970)
      */
     time_t getTimestamp(DateTimeString &string);
 
     /**
      * @brief Convert epoch time to human-readable timestamp string
      *
-     * @param epochTime Epoch time
-     * @param string human-readable string with time
+     * @param epochTime Epoch time (number of seconds that have elapsed since January 1, 1970)
+     * @param string Human-readable timestamp string
      */
     void epochToTimestamp(time_t epochTime, DateTimeString &string);
 } // namespace SystemTime

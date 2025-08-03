@@ -313,15 +313,11 @@ void setup()
     // Power up the board
     Board::powerUp();
 
-    // Initialize system time with RTC
-    bool status = SystemTime::initialize(Wire);
-    if (status == false)
-    {
-        LOG_ERROR("System time initialization failed");
-    }
+    // Initialize system time with RTC (after the board power-up and I2C pull-ups activation)
+    SystemTime::initialize(Wire);
 
     // Start SD file system
-    status = SD::FS::start(Board::SpiConfig::pinCsSd, Board::SpiConfig::frequency);
+    bool status = SD::FS::start(Board::SpiConfig::pinCsSd, Board::SpiConfig::frequency);
     if (status == false)
     {
         LOG_ERROR("SD initialization failed");
