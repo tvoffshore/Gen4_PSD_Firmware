@@ -20,6 +20,16 @@
 #include <Log.hpp>
 #include <Settings.hpp>
 
+#if IMU_TEST_MODE
+#include <math.h>
+
+// Example: 2000-sample synthetic series for X-axis
+static const int16_t testSeriesX[32] = {
+#include "data/test_series_x.inl" // Or generate via Python script
+};
+static size_t testIndex = 0;
+#endif // IMU_TEST_MODE
+
 using namespace Imu;
 
 namespace
@@ -222,6 +232,20 @@ bool Imu::stop(Module module)
  */
 bool Imu::read(Module module, Data &data)
 {
+#if IMU_TEST_MODE
+    size_t idx = testIndex % (sizeof(testSeriesX) / sizeof(*testSeriesX));
+
+    // Feed synthetic test data regardless of IMU state
+    data.x = testSeriesX[idx];
+    data.y = 0;
+    data.z = 0;
+
+    // Move to next sample
+    testIndex++;
+
+    // Pretend the sensor read succeeded
+    return true;
+#else  // IMU_TEST_MODE
     bool result = false;
 
     if (isInitialized == true)
@@ -246,6 +270,7 @@ bool Imu::read(Module module, Data &data)
     }
 
     return result;
+#endif // IMU_TEST_MODE
 }
 
 /**
