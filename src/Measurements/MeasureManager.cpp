@@ -191,13 +191,13 @@ namespace
         uint16_t adc1[bufferSize];
         uint16_t adc2[bufferSize];
 
-        int16_t accX[bufferSize];
-        int16_t accY[bufferSize];
-        int16_t accZ[bufferSize];
+        Imu::Axis accX[bufferSize];
+        Imu::Axis accY[bufferSize];
+        Imu::Axis accZ[bufferSize];
 
-        int16_t gyrX[bufferSize];
-        int16_t gyrY[bufferSize];
-        int16_t gyrZ[bufferSize];
+        Imu::Axis gyrX[bufferSize];
+        Imu::Axis gyrY[bufferSize];
+        Imu::Axis gyrZ[bufferSize];
 
         float roll[bufferSize];
         float pitch[bufferSize];
@@ -818,12 +818,12 @@ namespace
 
         const uint16_t *pSamplesAdc1 = &buffer.adc1[offset];
         const uint16_t *pSamplesAdc2 = &buffer.adc2[offset];
-        const int16_t *pSamplesAccX = &buffer.accX[offset];
-        const int16_t *pSamplesAccY = &buffer.accY[offset];
-        const int16_t *pSamplesAccZ = &buffer.accZ[offset];
-        const int16_t *pSamplesGyroX = &buffer.gyrX[offset];
-        const int16_t *pSamplesGyroY = &buffer.gyrY[offset];
-        const int16_t *pSamplesGyroZ = &buffer.gyrZ[offset];
+        const Imu::Axis *pSamplesAccX = &buffer.accX[offset];
+        const Imu::Axis *pSamplesAccY = &buffer.accY[offset];
+        const Imu::Axis *pSamplesAccZ = &buffer.accZ[offset];
+        const Imu::Axis *pSamplesGyroX = &buffer.gyrX[offset];
+        const Imu::Axis *pSamplesGyroY = &buffer.gyrY[offset];
+        const Imu::Axis *pSamplesGyroZ = &buffer.gyrZ[offset];
         const float *pSamplesRoll = &buffer.roll[offset];
         const float *pSamplesPitch = &buffer.pitch[offset];
 
@@ -1030,7 +1030,7 @@ namespace
      * @param pAccY Pointer to accelerometer Y axis data
      * @param length Number of data points
      */
-    void calculateAccelResult(const int16_t *pAccX, const int16_t *pAccY, size_t length)
+    void calculateAccelResult(const Imu::Axis *pAccX, const Imu::Axis *pAccY, size_t length)
     {
         float sumX = 0;
         float sumY = 0;
@@ -1052,8 +1052,8 @@ namespace
         for (size_t idx = 0; idx < length; idx++)
         {
             // Remove average
-            float x = Imu::accelToMs2(pAccX[idx] - meanAccX);
-            float y = Imu::accelToMs2(pAccY[idx] - meanAccY);
+            float x = static_cast<float>(pAccX[idx]) - meanAccX;
+            float y = static_cast<float>(pAccY[idx]) - meanAccY;
 
             // Calculate sums
             sumX += x;
@@ -1068,16 +1068,17 @@ namespace
         {
             // Calculate slope
             float slope = numerator / denominator;
-
             // Calculate theta angle
             float theta = atan(slope);
 
+            float accelScaleMs2 = Imu::getAccelScaleMs2();
             for (size_t idx = 0; idx < length; idx++)
             {
-                float x = Imu::accelToMs2(pAccX[idx] - meanAccX);
-                float y = Imu::accelToMs2(pAccY[idx] - meanAccY);
+                float x = static_cast<float>(pAccX[idx]) - meanAccX;
+                float y = static_cast<float>(pAccY[idx]) - meanAccY;
 
-                accelResult[idx] = x * cos(theta) + y * sin(theta);
+                float accelValue = x * cos(theta) + y * sin(theta);
+                accelResult[idx] = accelValue * accelScaleMs2;
             }
         }
         else
@@ -1368,15 +1369,16 @@ namespace
             {
                 sdFile.println("Channel Name,ACC_X");
                 sdFile.println("Channel Units,m/s^2");
+                float accelScaleMs2 = Imu::getAccelScaleMs2();
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", Imu::accelToMs2(statisticAccX.max()));
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticAccX.max() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", Imu::accelToMs2(statisticAccX.min()));
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticAccX.min() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", Imu::accelToMs2(statisticAccX.mean()));
+                    snprintf(string, sizeof(string), "Mean,%G", statisticAccX.mean() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", Imu::accelToMs2(statisticAccX.deviation()));
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAccX.deviation() * accelScaleMs2);
                     sdFile.println(string);
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
@@ -1400,13 +1402,13 @@ namespace
                 sdFile.println("Channel Units,m/s^2");
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", Imu::accelToMs2(statisticAccY.max()));
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticAccY.max() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", Imu::accelToMs2(statisticAccY.min()));
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticAccY.min() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", Imu::accelToMs2(statisticAccY.mean()));
+                    snprintf(string, sizeof(string), "Mean,%G", statisticAccY.mean() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", Imu::accelToMs2(statisticAccY.deviation()));
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAccY.deviation() * accelScaleMs2);
                     sdFile.println(string);
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
@@ -1430,13 +1432,13 @@ namespace
                 sdFile.println("Channel Units,m/s^2");
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", Imu::accelToMs2(statisticAccZ.max()));
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticAccZ.max() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", Imu::accelToMs2(statisticAccZ.min()));
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticAccZ.min() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", Imu::accelToMs2(statisticAccZ.mean()));
+                    snprintf(string, sizeof(string), "Mean,%G", statisticAccZ.mean() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", Imu::accelToMs2(statisticAccZ.deviation()));
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAccZ.deviation() * accelScaleMs2);
                     sdFile.println(string);
                 }
                 sdFile.println(""); // End of channel
@@ -1446,15 +1448,16 @@ namespace
             {
                 sdFile.println("Channel Name,GYRO_X");
                 sdFile.println("Channel Units,rad/s");
+                float gyroScaleRPS = Imu::getGyroScaleRPS();
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", Imu::gyroToRads(statisticGyroX.max()));
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticGyroX.max() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", Imu::gyroToRads(statisticGyroX.min()));
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticGyroX.min() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", Imu::gyroToRads(statisticGyroX.mean()));
+                    snprintf(string, sizeof(string), "Mean,%G", statisticGyroX.mean() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", Imu::gyroToRads(statisticGyroX.deviation()));
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticGyroX.deviation() * gyroScaleRPS);
                     sdFile.println(string);
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
@@ -1478,13 +1481,13 @@ namespace
                 sdFile.println("Channel Units,rad/s");
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", Imu::gyroToRads(statisticGyroY.max()));
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticGyroY.max() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", Imu::gyroToRads(statisticGyroY.min()));
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticGyroY.min() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", Imu::gyroToRads(statisticGyroY.mean()));
+                    snprintf(string, sizeof(string), "Mean,%G", statisticGyroY.mean() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", Imu::gyroToRads(statisticGyroY.deviation()));
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticGyroY.deviation() * gyroScaleRPS);
                     sdFile.println(string);
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
@@ -1508,13 +1511,13 @@ namespace
                 sdFile.println("Channel Units,rad/s");
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", Imu::gyroToRads(statisticGyroZ.max()));
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticGyroZ.max() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", Imu::gyroToRads(statisticGyroZ.min()));
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticGyroZ.min() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", Imu::gyroToRads(statisticGyroZ.mean()));
+                    snprintf(string, sizeof(string), "Mean,%G", statisticGyroZ.mean() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", Imu::gyroToRads(statisticGyroZ.deviation()));
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticGyroZ.deviation() * gyroScaleRPS);
                     sdFile.println(string);
                 }
                 sdFile.println(""); // End of channel
@@ -1820,10 +1823,11 @@ namespace
             buffer.accY[offset] = imuData.y;
             buffer.accZ[offset] = imuData.z;
 
-            // Convert to accel to G
-            accelGX = Imu::accelToG(imuData.x);
-            accelGY = Imu::accelToG(imuData.y);
-            accelGZ = Imu::accelToG(imuData.z);
+            // Convert accel raw to G
+            float accelScaleG = Imu::getAccelScaleG();
+            accelGX = imuData.x * accelScaleG;
+            accelGY = imuData.y * accelScaleG;
+            accelGZ = imuData.z * accelScaleG;
         }
 
         if (isGyroSet())
@@ -1839,10 +1843,11 @@ namespace
             buffer.gyrY[offset] = imuData.y;
             buffer.gyrZ[offset] = imuData.z;
 
-            // Convert to gyro to DPS
-            gyroDpsX = Imu::gyroToDegs(imuData.x);
-            gyroDpsY = Imu::gyroToDegs(imuData.y);
-            gyroDpsZ = Imu::gyroToDegs(imuData.z);
+            // Convert gyro raw to DPS
+            float gyroScaleDPS = Imu::getGyroScaleDPS();
+            gyroDpsX = imuData.x * gyroScaleDPS;
+            gyroDpsY = imuData.y * gyroScaleDPS;
+            gyroDpsZ = imuData.z * gyroScaleDPS;
         }
 
         if (context.config.sensorMask & SensorMask::Angle)
@@ -2000,7 +2005,7 @@ namespace
         Serials::Manager::subscribeToRead(Serials::CommandId::AccelRange,
                                           [](const char **responseString)
                                           {
-                                              uint8_t value = Imu::range(Imu::Module::Accel);
+                                              uint8_t value = Imu::getRange(Imu::Module::Accel);
                                               snprintf(dataString, sizeof(dataString), "%u", value);
                                               *responseString = dataString;
                                           });
@@ -2008,7 +2013,7 @@ namespace
         Serials::Manager::subscribeToRead(Serials::CommandId::GyroRange,
                                           [](const char **responseString)
                                           {
-                                              uint8_t value = Imu::range(Imu::Module::Gyro);
+                                              uint8_t value = Imu::getRange(Imu::Module::Gyro);
                                               snprintf(dataString, sizeof(dataString), "%u", value);
                                               *responseString = dataString;
                                           });

@@ -98,42 +98,38 @@ namespace Imu
     bool setRange(Module module, uint8_t range);
 
     /**
-     * @brief Get IMU module range
+     * @brief Return IMU module range
      *
      * @param module IMU module
      * @return Current module range
      */
-    uint8_t range(Module module);
+    uint8_t getRange(Module module);
 
     /**
-     * @brief Convert accelerometer axis value to m/s^2 units
+     * @brief Return the accelerometer scale from raw value to G units
      *
-     * @param value Axis value
-     * @return Value in m/s^2 units
+     * @return The factor value
      */
-    float accelToMs2(Axis value);
+    float getAccelScaleG();
 
     /**
-     * @brief Convert accelerometer axis value to G units
+     * @brief Return the accelerometer scale from raw value to meters/second^2 units
      *
-     * @param value Axis value
-     * @return Value in G units
+     * @return The factor value
      */
-    float accelToG(Axis value);
+    float getAccelScaleMs2();
 
     /**
-     * @brief Convert gyroscope axis value to RAD/s units
+     * @brief Return the gyroscope scale from raw value to degrees/second units
      *
-     * @param value Axis value
-     * @return Value in RAD/s units
+     * @return The factor value
      */
-    float gyroToRads(Axis value);
+    float getGyroScaleDPS();
 
     /**
-     * @brief Convert gyroscope axis value to Deg/s units
+     * @brief Return the gyroscope scale from raw value to radians/second units
      *
-     * @param value Axis value
-     * @return Value in Deg/s units
+     * @return The factor value
      */
-    float gyroToDegs(Axis value);
+    float getGyroScaleRPS();
 } // namespace Imu

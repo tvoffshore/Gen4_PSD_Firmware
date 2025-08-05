@@ -44,8 +44,8 @@ namespace
     static_assert(sizeof(accelRangesG) / sizeof(*accelRangesG) > AccelRange::G16);
 
     // Gyroscope ranges, deg/sec
-    constexpr size_t gyroRangesDps[] = {125, 250, 500, 1000, 2000};
-    static_assert(sizeof(gyroRangesDps) / sizeof(*gyroRangesDps) > GyroRange::DPS2000);
+    constexpr size_t gyroRangesDPS[] = {125, 250, 500, 1000, 2000};
+    static_assert(sizeof(gyroRangesDPS) / sizeof(*gyroRangesDPS) > GyroRange::DPS2000);
 
     // Accelerometer full-scale settings
     constexpr IIM42652_ACCEL_CONFIG0_FS_SEL_t accelFullScaleList[] = {
@@ -66,7 +66,7 @@ namespace
         IIM42652_GYRO_CONFIG0_FS_SEL_2000dps, // Option #4: +/- 2000 degrees/second
     };
     static_assert(sizeof(gyroFullScaleList) / sizeof(*gyroFullScaleList) ==
-                  sizeof(gyroRangesDps) / sizeof(*gyroRangesDps));
+                  sizeof(gyroRangesDPS) / sizeof(*gyroRangesDPS));
 
     // IMU axis maximum value
     constexpr size_t axisMaxValue = 32768;
@@ -76,6 +76,11 @@ namespace
     constexpr uint32_t waitValidDelayMs = 1;
     // Timeout of waiting for the valid IMU axis values, milliseconds
     constexpr uint32_t waitValidTimeoutMs = 100;
+
+    // G constant in meters/second^2
+    constexpr float GMs2 = 9.81;
+    // Degrees to radians factor
+    constexpr float degToRad = M_PI / 360;
 
     // Accelerometer default range index
     constexpr uint8_t accelRangeDefault = AccelRange::G2;
@@ -323,12 +328,12 @@ bool Imu::setRange(Module module, uint8_t range)
 }
 
 /**
- * @brief Get IMU module range
+ * @brief Return IMU module range
  *
  * @param module IMU module
  * @return Current module range
  */
-uint8_t Imu::range(Module module)
+uint8_t Imu::getRange(Module module)
 {
     uint8_t range = module == Module::Accel ? settings.accelRange : settings.gyroRange;
 
@@ -336,65 +341,55 @@ uint8_t Imu::range(Module module)
 }
 
 /**
- * @brief Convert accelerometer axis value to m/s^2 units
+ * @brief Return the accelerometer scale from raw value to G units
  *
- * @param value Axis value
- * @return Value in m/s^2 units
+ * @return The scale value
  */
-float Imu::accelToMs2(Axis value)
+float Imu::getAccelScaleG()
 {
     assert(settings.accelRange < sizeof(accelRangesG) / sizeof(*accelRangesG));
 
     size_t accelRangeG = accelRangesG[settings.accelRange];
-    float units = (float)value * accelRangeG * 9.81 / axisMaxValue;
+    float scale = static_cast<float>(accelRangeG) / axisMaxValue;
 
-    return units;
+    return scale;
 }
 
 /**
- * @brief Convert accelerometer axis value to G units
+ * @brief Return the accelerometer scale from raw value to meters/second^2 units
  *
- * @param value Axis value
- * @return Value in G units
+ * @return The scale value
  */
-float Imu::accelToG(Axis value)
+float Imu::getAccelScaleMs2()
 {
-    assert(settings.accelRange < sizeof(accelRangesG) / sizeof(*accelRangesG));
+    float scale = getAccelScaleG() * GMs2;
 
-    size_t accelRangeG = accelRangesG[settings.accelRange];
-    float units = (float)value * accelRangeG / axisMaxValue;
-
-    return units;
+    return scale;
 }
 
 /**
- * @brief Convert gyroscope axis value to RAD/s units
+ * @brief Return the gyroscope scale from raw value to degrees/second units
  *
- * @param value Axis value
- * @return Value in RAD/s units
+ * @return The scale value
  */
-float Imu::gyroToRads(Axis value)
+float Imu::getGyroScaleDPS()
 {
-    assert(settings.gyroRange < sizeof(gyroRangesDps) / sizeof(*gyroRangesDps));
+    assert(settings.gyroRange < sizeof(gyroRangesDPS) / sizeof(*gyroRangesDPS));
 
-    size_t gyroRangeDps = gyroRangesDps[settings.gyroRange];
-    float units = (float)value * gyroRangeDps * M_PI / 360 / axisMaxValue;
+    size_t gyroRangeDPS = gyroRangesDPS[settings.gyroRange];
+    float scale = static_cast<float>(gyroRangeDPS) / axisMaxValue;
 
-    return units;
+    return scale;
 }
 
 /**
- * @brief Convert gyroscope axis value to Deg/s units
+ * @brief Return the gyroscope scale from raw value to radians/second units
  *
- * @param value Axis value
- * @return Value in Deg/s units
+ * @return The scale value
  */
-float Imu::gyroToDegs(Axis value)
+float Imu::getGyroScaleRPS()
 {
-    assert(settings.gyroRange < sizeof(gyroRangesDps) / sizeof(*gyroRangesDps));
+    float scale = getGyroScaleDPS() * degToRad;
 
-    size_t gyroRangeDps = gyroRangesDps[settings.gyroRange];
-    float units = (float)value * gyroRangeDps / axisMaxValue;
-
-    return units;
+    return scale;
 }
