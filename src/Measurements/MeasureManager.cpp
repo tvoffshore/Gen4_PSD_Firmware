@@ -72,9 +72,6 @@ namespace
         constexpr uint8_t All = AccelResult | Adc2 | Adc1 | Angle | Gyro | Accel;
     } // namespace SensorMask
 
-    // Total time threshold to complete measurements, percents
-    constexpr float completePcnt = 99.0;
-
     // Buffer contains 2 sets of samples (ping-pong)
     constexpr size_t bufferSize = 2 * Measurements::samplesCountMax;
 
@@ -213,6 +210,7 @@ namespace
     {
         size_t segmentCount;                // Count of ready segments
         size_t segmentSize;                 // Size of segment, samples
+        size_t segmentTotal;                // Count of total segments in measurement
         size_t segmentTimeMs;               // Time of segment accumulating, milliseconds
         size_t sampleTimeMs;                // Interval between samples, milliseconds
         SystemTime::DateTime startDateTime; // Start measurements date and time
@@ -236,6 +234,8 @@ namespace
             segmentCount = 0;
             // Determine segment size
             segmentSize = pow2[config.psdPoints];
+            // Calculate count of total segments in measurement
+            segmentTotal = roundf(static_cast<float>(config.measureInterval) * config.sampleFrequency / segmentSize);
             // Calculate interval between samples
             sampleTimeMs = millisPerSecond / config.sampleFrequency;
             // Calculate time of segment accumulating
@@ -244,8 +244,8 @@ namespace
             // Obtain measurements start date and time
             startEpochTime = SystemTime::getDateTime(startDateTime);
 
-            LOG_INFO("Setup: sensors %u, data type %u, segment %d samples, sample time %d ms, segment time %d ms",
-                     config.sensorMask, config.dataTypeMask, segmentSize, sampleTimeMs, segmentTimeMs);
+            LOG_INFO("Sensors %u, data type %u, samples %d, sample time %d ms, segment time %d ms, total segments %d",
+                     config.sensorMask, config.dataTypeMask, segmentSize, sampleTimeMs, segmentTimeMs, segmentTotal);
         }
     };
 
@@ -2301,12 +2301,11 @@ void Manager::process()
 
         // Increment count of ready segments
         context.segmentCount++;
-        size_t measureTimeMs = context.segmentCount * context.segmentTimeMs;
 
-        float readyPcnt = static_cast<float>(measureTimeMs) / secondsToMillis(context.config.measureInterval) * 100;
+        float readyPcnt = static_cast<float>(context.segmentCount) / context.segmentTotal * 100;
         LOG_INFO("Segment %d is ready, complete %.1f%%", context.segmentCount, readyPcnt);
 
-        if (readyPcnt >= completePcnt)
+        if (context.segmentCount >= context.segmentTotal)
         {
             // Stop current sensor measurements
             Manager::stop();
