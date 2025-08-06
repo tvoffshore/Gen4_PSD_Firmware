@@ -174,5 +174,4 @@ void PSD<Type>::clear()
 }
 
 template class PSD<uint16_t>;
-template class PSD<int16_t>;
 template class PSD<float>;

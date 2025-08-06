@@ -264,8 +264,10 @@ namespace
 
     // Samples buffer
     Buffer buffer = {0};
-    // Accelerometer resultant direction buffer
-    float accelResult[Measurements::samplesCountMax];
+    // Accelerometer resultant direction buffer, m/s^2
+    float accelResultMs2[Measurements::samplesCountMax];
+    // IMU samples buffer, units
+    float imuSamplesUnits[Measurements::samplesCountMax];
 
     // File on SD to store raw measurements data
     SD::File sdRawFile;
@@ -276,34 +278,34 @@ namespace
     // Current measurements context
     Context context;
 
-    // PSD measurements for ADC1 and ADC2
-    Measurements::PSD<uint16_t> psdAdc1;
-    Measurements::PSD<uint16_t> psdAdc2;
-    // PSD measurements for accelerometer axises X/Y
-    Measurements::PSD<int16_t> psdAccX;
-    Measurements::PSD<int16_t> psdAccY;
-    // PSD measurements for gyroscope axises X/Y
-    Measurements::PSD<int16_t> psdGyroX;
-    Measurements::PSD<int16_t> psdGyroY;
-    // PSD measurements for accelerometer resultant direction
-    Measurements::PSD<float> psdAccResult;
+    // PSD measurements for ADC1 and ADC2, raw values
+    Measurements::PSD<uint16_t> psdAdc1Raw;
+    Measurements::PSD<uint16_t> psdAdc2Raw;
+    // PSD measurements for accelerometer axises X/Y, m/s^2
+    Measurements::PSD<float> psdAccXMs2;
+    Measurements::PSD<float> psdAccYMs2;
+    // PSD measurements for gyroscope axises X/Y, RPS
+    Measurements::PSD<float> psdGyroXRPS;
+    Measurements::PSD<float> psdGyroYRPS;
+    // PSD measurements for accelerometer resultant direction, m/s^2
+    Measurements::PSD<float> psdAccResultMs2;
 
-    // Statistic for ADC1 and ADC2
-    Measurements::Statistic<uint16_t> statisticAdc1;
-    Measurements::Statistic<uint16_t> statisticAdc2;
-    // Statistic for accelerometer axises X/Y/Z
-    Measurements::Statistic<int16_t> statisticAccX;
-    Measurements::Statistic<int16_t> statisticAccY;
-    Measurements::Statistic<int16_t> statisticAccZ;
-    // Statistic for gyroscope axises X/Y/Z
-    Measurements::Statistic<int16_t> statisticGyroX;
-    Measurements::Statistic<int16_t> statisticGyroY;
-    Measurements::Statistic<int16_t> statisticGyroZ;
-    // Statistic for angle axises Roll/Pitch
-    Measurements::Statistic<float> statisticRoll;
-    Measurements::Statistic<float> statisticPitch;
-    // Statistic for accelerometer resultant direction
-    Measurements::Statistic<float> statisticAccResult;
+    // Statistic for ADC1 and ADC2, raw values
+    Measurements::Statistic<uint16_t> statisticAdc1Raw;
+    Measurements::Statistic<uint16_t> statisticAdc2Raw;
+    // Statistic for accelerometer axises X/Y/Z, raw values
+    Measurements::Statistic<int16_t> statisticAccXRaw;
+    Measurements::Statistic<int16_t> statisticAccYRaw;
+    Measurements::Statistic<int16_t> statisticAccZRaw;
+    // Statistic for gyroscope axises X/Y/Z, raw values
+    Measurements::Statistic<int16_t> statisticGyroXRaw;
+    Measurements::Statistic<int16_t> statisticGyroYRaw;
+    Measurements::Statistic<int16_t> statisticGyroZRaw;
+    // Statistic for angle axises Roll/Pitch, degrees
+    Measurements::Statistic<float> statisticRollDeg;
+    Measurements::Statistic<float> statisticPitchDeg;
+    // Statistic for accelerometer resultant direction, m/s^2
+    Measurements::Statistic<float> statisticAccResultMs2;
 
     // Measurements settings
     MeasureSettings settings = {
@@ -323,7 +325,8 @@ namespace
     void finishMeasurements();
     void restartMeasurements();
     void processMeasurements(size_t index);
-    void calculateAccelResult(const int16_t *pAccX, const int16_t *pAccY, size_t length);
+    void calculateAccelResult(const Imu::Axis *pAccX, const Imu::Axis *pAccY, size_t length);
+    void convertImuRawToUnits(const Imu::Axis *pRaw, float *pUnits, float scale, size_t length);
     void saveMeasurements();
     bool savePsdFile(SensorType sensorType, const PsdResult &psdResult, size_t points);
     bool saveStatisticFile(SensorType sensorType, const StatisticData &data);
@@ -630,25 +633,25 @@ namespace
             // Setup PSD measurements
             if (context.config.sensorMask & SensorMask::Adc1)
             {
-                psdAdc1.setup(context.segmentSize, context.config.sampleFrequency);
+                psdAdc1Raw.setup(context.segmentSize, context.config.sampleFrequency);
             }
             if (context.config.sensorMask & SensorMask::Adc2)
             {
-                psdAdc2.setup(context.segmentSize, context.config.sampleFrequency);
+                psdAdc2Raw.setup(context.segmentSize, context.config.sampleFrequency);
             }
             if (context.config.sensorMask & SensorMask::Accel)
             {
-                psdAccX.setup(context.segmentSize, context.config.sampleFrequency);
-                psdAccY.setup(context.segmentSize, context.config.sampleFrequency);
+                psdAccXMs2.setup(context.segmentSize, context.config.sampleFrequency);
+                psdAccYMs2.setup(context.segmentSize, context.config.sampleFrequency);
             }
             if (context.config.sensorMask & SensorMask::Gyro)
             {
-                psdGyroX.setup(context.segmentSize, context.config.sampleFrequency);
-                psdGyroY.setup(context.segmentSize, context.config.sampleFrequency);
+                psdGyroXRPS.setup(context.segmentSize, context.config.sampleFrequency);
+                psdGyroYRPS.setup(context.segmentSize, context.config.sampleFrequency);
             }
             if (context.config.sensorMask & SensorMask::AccelResult)
             {
-                psdAccResult.setup(context.segmentSize, context.config.sampleFrequency);
+                psdAccResultMs2.setup(context.segmentSize, context.config.sampleFrequency);
             }
         }
 
@@ -657,32 +660,32 @@ namespace
             // Reset measurements statistic
             if (context.config.sensorMask & SensorMask::Adc1)
             {
-                statisticAdc1.reset();
+                statisticAdc1Raw.reset();
             }
             if (context.config.sensorMask & SensorMask::Adc2)
             {
-                statisticAdc2.reset();
+                statisticAdc2Raw.reset();
             }
             if (context.config.sensorMask & SensorMask::Accel)
             {
-                statisticAccX.reset();
-                statisticAccY.reset();
-                statisticAccZ.reset();
+                statisticAccXRaw.reset();
+                statisticAccYRaw.reset();
+                statisticAccZRaw.reset();
             }
             if (context.config.sensorMask & SensorMask::Gyro)
             {
-                statisticGyroX.reset();
-                statisticGyroY.reset();
-                statisticGyroZ.reset();
+                statisticGyroXRaw.reset();
+                statisticGyroYRaw.reset();
+                statisticGyroZRaw.reset();
             }
             if (context.config.sensorMask & SensorMask::Angle)
             {
-                statisticRoll.reset();
-                statisticPitch.reset();
+                statisticRollDeg.reset();
+                statisticPitchDeg.reset();
             }
             if (context.config.sensorMask & SensorMask::AccelResult)
             {
-                statisticAccResult.reset();
+                statisticAccResultMs2.reset();
             }
         }
 
@@ -816,21 +819,21 @@ namespace
         // Set CPU frequency to the maximum possible
         Power::setCpuFrequency(Power::cpuFrequencyMaxMHz);
 
-        const uint16_t *pSamplesAdc1 = &buffer.adc1[offset];
-        const uint16_t *pSamplesAdc2 = &buffer.adc2[offset];
-        const Imu::Axis *pSamplesAccX = &buffer.accX[offset];
-        const Imu::Axis *pSamplesAccY = &buffer.accY[offset];
-        const Imu::Axis *pSamplesAccZ = &buffer.accZ[offset];
-        const Imu::Axis *pSamplesGyroX = &buffer.gyrX[offset];
-        const Imu::Axis *pSamplesGyroY = &buffer.gyrY[offset];
-        const Imu::Axis *pSamplesGyroZ = &buffer.gyrZ[offset];
-        const float *pSamplesRoll = &buffer.roll[offset];
-        const float *pSamplesPitch = &buffer.pitch[offset];
+        const uint16_t *pSamplesAdc1Raw = &buffer.adc1[offset];
+        const uint16_t *pSamplesAdc2Raw = &buffer.adc2[offset];
+        const Imu::Axis *pSamplesAccXRaw = &buffer.accX[offset];
+        const Imu::Axis *pSamplesAccYRaw = &buffer.accY[offset];
+        const Imu::Axis *pSamplesAccZRaw = &buffer.accZ[offset];
+        const Imu::Axis *pSamplesGyroXRaw = &buffer.gyrX[offset];
+        const Imu::Axis *pSamplesGyroYRaw = &buffer.gyrY[offset];
+        const Imu::Axis *pSamplesGyroZRaw = &buffer.gyrZ[offset];
+        const float *pSamplesRollDeg = &buffer.roll[offset];
+        const float *pSamplesPitchDeg = &buffer.pitch[offset];
 
         if (context.config.sensorMask & SensorMask::AccelResult)
         {
             // Calculate Accel Result samples first before PSD and Statistic
-            calculateAccelResult(pSamplesAccX, pSamplesAccY, context.segmentSize);
+            calculateAccelResult(pSamplesAccXRaw, pSamplesAccYRaw, context.segmentSize);
         }
 
         if (context.config.dataTypeMask & DataTypeMask::Psd)
@@ -838,25 +841,35 @@ namespace
             // Perform PSD calculations
             if (context.config.sensorMask & SensorMask::Adc1)
             {
-                psdAdc1.computeSegment(pSamplesAdc1);
+                psdAdc1Raw.computeSegment(pSamplesAdc1Raw);
             }
             if (context.config.sensorMask & SensorMask::Adc2)
             {
-                psdAdc2.computeSegment(pSamplesAdc2);
+                psdAdc2Raw.computeSegment(pSamplesAdc2Raw);
             }
             if (context.config.sensorMask & SensorMask::Accel)
             {
-                psdAccX.computeSegment(pSamplesAccX);
-                psdAccY.computeSegment(pSamplesAccY);
+                float accelScaleMs2 = Imu::getAccelScaleMs2();
+
+                convertImuRawToUnits(pSamplesAccXRaw, imuSamplesUnits, accelScaleMs2, context.segmentSize);
+                psdAccXMs2.computeSegment(imuSamplesUnits);
+
+                convertImuRawToUnits(pSamplesAccYRaw, imuSamplesUnits, accelScaleMs2, context.segmentSize);
+                psdAccYMs2.computeSegment(imuSamplesUnits);
             }
             if (context.config.sensorMask & SensorMask::Gyro)
             {
-                psdGyroX.computeSegment(pSamplesGyroX);
-                psdGyroY.computeSegment(pSamplesGyroY);
+                float gyroScaleRPS = Imu::getGyroScaleRPS();
+
+                convertImuRawToUnits(pSamplesGyroXRaw, imuSamplesUnits, gyroScaleRPS, context.segmentSize);
+                psdGyroXRPS.computeSegment(imuSamplesUnits);
+
+                convertImuRawToUnits(pSamplesGyroYRaw, imuSamplesUnits, gyroScaleRPS, context.segmentSize);
+                psdGyroYRPS.computeSegment(imuSamplesUnits);
             }
             if (context.config.sensorMask & SensorMask::AccelResult)
             {
-                psdAccResult.computeSegment(accelResult);
+                psdAccResultMs2.computeSegment(accelResultMs2);
             }
         }
 
@@ -865,32 +878,32 @@ namespace
             // Perform Statistic calculations
             if (context.config.sensorMask & SensorMask::Adc1)
             {
-                statisticAdc1.calculate(pSamplesAdc1, context.segmentSize);
+                statisticAdc1Raw.calculate(pSamplesAdc1Raw, context.segmentSize);
             }
             if (context.config.sensorMask & SensorMask::Adc2)
             {
-                statisticAdc2.calculate(pSamplesAdc2, context.segmentSize);
+                statisticAdc2Raw.calculate(pSamplesAdc2Raw, context.segmentSize);
             }
             if (context.config.sensorMask & SensorMask::Accel)
             {
-                statisticAccX.calculate(pSamplesAccX, context.segmentSize);
-                statisticAccY.calculate(pSamplesAccY, context.segmentSize);
-                statisticAccZ.calculate(pSamplesAccZ, context.segmentSize);
+                statisticAccXRaw.calculate(pSamplesAccXRaw, context.segmentSize);
+                statisticAccYRaw.calculate(pSamplesAccYRaw, context.segmentSize);
+                statisticAccZRaw.calculate(pSamplesAccZRaw, context.segmentSize);
             }
             if (context.config.sensorMask & SensorMask::Gyro)
             {
-                statisticGyroX.calculate(pSamplesGyroX, context.segmentSize);
-                statisticGyroY.calculate(pSamplesGyroY, context.segmentSize);
-                statisticGyroZ.calculate(pSamplesGyroZ, context.segmentSize);
+                statisticGyroXRaw.calculate(pSamplesGyroXRaw, context.segmentSize);
+                statisticGyroYRaw.calculate(pSamplesGyroYRaw, context.segmentSize);
+                statisticGyroZRaw.calculate(pSamplesGyroZRaw, context.segmentSize);
             }
             if (context.config.sensorMask & SensorMask::Angle)
             {
-                statisticRoll.calculate(pSamplesRoll, context.segmentSize);
-                statisticPitch.calculate(pSamplesPitch, context.segmentSize);
+                statisticRollDeg.calculate(pSamplesRollDeg, context.segmentSize);
+                statisticPitchDeg.calculate(pSamplesPitchDeg, context.segmentSize);
             }
             if (context.config.sensorMask & SensorMask::AccelResult)
             {
-                statisticAccResult.calculate(accelResult, context.segmentSize);
+                statisticAccResultMs2.calculate(accelResultMs2, context.segmentSize);
             }
         }
 
@@ -928,7 +941,7 @@ namespace
 
                     if (context.config.sensorMask & SensorMask::Adc1)
                     {
-                        written = snprintf(&string[stringOffset], stringRemain, "%u,", pSamplesAdc1[idx]);
+                        written = snprintf(&string[stringOffset], stringRemain, "%u,", pSamplesAdc1Raw[idx]);
                         if (written > 0)
                         {
                             stringOffset += written;
@@ -937,7 +950,7 @@ namespace
                     }
                     if (context.config.sensorMask & SensorMask::Adc2)
                     {
-                        written = snprintf(&string[stringOffset], stringRemain, "%u,", pSamplesAdc2[idx]);
+                        written = snprintf(&string[stringOffset], stringRemain, "%u,", pSamplesAdc2Raw[idx]);
                         if (written > 0)
                         {
                             stringOffset += written;
@@ -946,19 +959,21 @@ namespace
                     }
                     if (context.config.sensorMask & SensorMask::Accel)
                     {
-                        written = snprintf(&string[stringOffset], stringRemain, "%d,", pSamplesAccX[idx]);
+                        float accelScaleMs2 = Imu::getAccelScaleMs2();
+
+                        written = snprintf(&string[stringOffset], stringRemain, "%.2f,", pSamplesAccXRaw[idx] * accelScaleMs2);
                         if (written > 0)
                         {
                             stringOffset += written;
                             stringRemain -= written;
                         }
-                        written = snprintf(&string[stringOffset], stringRemain, "%d,", pSamplesAccY[idx]);
+                        written = snprintf(&string[stringOffset], stringRemain, "%.2f,", pSamplesAccYRaw[idx] * accelScaleMs2);
                         if (written > 0)
                         {
                             stringOffset += written;
                             stringRemain -= written;
                         }
-                        written = snprintf(&string[stringOffset], stringRemain, "%d,", pSamplesAccZ[idx]);
+                        written = snprintf(&string[stringOffset], stringRemain, "%.2f,", pSamplesAccZRaw[idx] * accelScaleMs2);
                         if (written > 0)
                         {
                             stringOffset += written;
@@ -967,19 +982,21 @@ namespace
                     }
                     if (context.config.sensorMask & SensorMask::Gyro)
                     {
-                        written = snprintf(&string[stringOffset], stringRemain, "%d,", pSamplesGyroX[idx]);
+                        float gyroScaleRPS = Imu::getGyroScaleRPS();
+
+                        written = snprintf(&string[stringOffset], stringRemain, "%.2f,", pSamplesGyroXRaw[idx] * gyroScaleRPS);
                         if (written > 0)
                         {
                             stringOffset += written;
                             stringRemain -= written;
                         }
-                        written = snprintf(&string[stringOffset], stringRemain, "%d,", pSamplesGyroY[idx]);
+                        written = snprintf(&string[stringOffset], stringRemain, "%.2f,", pSamplesGyroYRaw[idx] * gyroScaleRPS);
                         if (written > 0)
                         {
                             stringOffset += written;
                             stringRemain -= written;
                         }
-                        written = snprintf(&string[stringOffset], stringRemain, "%d,", pSamplesGyroZ[idx]);
+                        written = snprintf(&string[stringOffset], stringRemain, "%.2f,", pSamplesGyroZRaw[idx] * gyroScaleRPS);
                         if (written > 0)
                         {
                             stringOffset += written;
@@ -988,13 +1005,13 @@ namespace
                     }
                     if (context.config.sensorMask & SensorMask::Angle)
                     {
-                        written = snprintf(&string[stringOffset], stringRemain, "%.1f,", pSamplesRoll[idx]);
+                        written = snprintf(&string[stringOffset], stringRemain, "%.1f,", pSamplesRollDeg[idx]);
                         if (written > 0)
                         {
                             stringOffset += written;
                             stringRemain -= written;
                         }
-                        written = snprintf(&string[stringOffset], stringRemain, "%.1f,", pSamplesPitch[idx]);
+                        written = snprintf(&string[stringOffset], stringRemain, "%.1f,", pSamplesPitchDeg[idx]);
                         if (written > 0)
                         {
                             stringOffset += written;
@@ -1003,7 +1020,7 @@ namespace
                     }
                     if (context.config.sensorMask & SensorMask::AccelResult)
                     {
-                        written = snprintf(&string[stringOffset], stringRemain, "%.2f,", accelResult[idx]);
+                        written = snprintf(&string[stringOffset], stringRemain, "%.2f,", accelResultMs2[idx]);
                         if (written > 0)
                         {
                             stringOffset += written;
@@ -1077,16 +1094,36 @@ namespace
                 float x = static_cast<float>(pAccX[idx]) - meanAccX;
                 float y = static_cast<float>(pAccY[idx]) - meanAccY;
 
-                float accelValue = x * cos(theta) + y * sin(theta);
-                accelResult[idx] = accelValue * accelScaleMs2;
+                float accelResultRaw = x * cos(theta) + y * sin(theta);
+                accelResultMs2[idx] = accelResultRaw * accelScaleMs2;
             }
         }
         else
         {
             for (size_t idx = 0; idx < length; idx++)
             {
-                accelResult[idx] = 0.0;
+                accelResultMs2[idx] = 0.0;
             }
+        }
+    }
+
+    /**
+     * @brief Convert IMU raw values to engineering units
+     *
+     * @param pRaw Raw values
+     * @param pUnits Engineering units
+     * @param scale Scale factor for conversion
+     * @param length Length of the buffers to convert
+     */
+    void convertImuRawToUnits(const Imu::Axis *pRaw, float *pUnits, float scale, size_t length)
+    {
+        assert(pRaw);
+        assert(pUnits);
+        assert(length > 0);
+
+        for (size_t idx = 0; idx < length; idx++)
+        {
+            pUnits[idx] = pRaw[idx] * scale;
         }
     }
 
@@ -1116,37 +1153,37 @@ namespace
             if (context.config.sensorMask & SensorMask::Adc1)
             {
                 // BIN/PSD/ADC1
-                savePsdFile(SensorType::Adc1, psdAdc1.getResult(), resultPoints);
+                savePsdFile(SensorType::Adc1, psdAdc1Raw.getResult(), resultPoints);
             }
 
             if (context.config.sensorMask & SensorMask::Adc2)
             {
                 // BIN/PSD/ADC2
-                savePsdFile(SensorType::Adc2, psdAdc2.getResult(), resultPoints);
+                savePsdFile(SensorType::Adc2, psdAdc2Raw.getResult(), resultPoints);
             }
 
             if (context.config.sensorMask & SensorMask::Accel)
             {
                 // BIN/PSD/ACC_X
-                savePsdFile(SensorType::AccelX, psdAccX.getResult(), resultPoints);
+                savePsdFile(SensorType::AccelX, psdAccXMs2.getResult(), resultPoints);
 
                 // BIN/PSD/ACC_Y
-                savePsdFile(SensorType::AccelY, psdAccY.getResult(), resultPoints);
+                savePsdFile(SensorType::AccelY, psdAccYMs2.getResult(), resultPoints);
             }
 
             if (context.config.sensorMask & SensorMask::Gyro)
             {
                 // BIN/PSD/GYR_X
-                savePsdFile(SensorType::GyroX, psdGyroX.getResult(), resultPoints);
+                savePsdFile(SensorType::GyroX, psdGyroXRPS.getResult(), resultPoints);
 
                 // BIN/PSD/GYR_Y
-                savePsdFile(SensorType::GyroY, psdGyroY.getResult(), resultPoints);
+                savePsdFile(SensorType::GyroY, psdGyroYRPS.getResult(), resultPoints);
             }
 
             if (context.config.sensorMask & SensorMask::AccelResult)
             {
                 // BIN/PSD/ACC_RES
-                savePsdFile(SensorType::AccelResult, psdAccResult.getResult(), resultPoints);
+                savePsdFile(SensorType::AccelResult, psdAccResultMs2.getResult(), resultPoints);
             }
         }
 
@@ -1155,10 +1192,10 @@ namespace
             if (context.config.sensorMask & SensorMask::Adc1)
             {
                 StatisticData dataAdc1 = {
-                    .max = static_cast<float>(statisticAdc1.max()),
-                    .min = static_cast<float>(statisticAdc1.min()),
-                    .mean = statisticAdc1.mean(),
-                    .deviation = statisticAdc1.deviation(),
+                    .max = static_cast<float>(statisticAdc1Raw.max()),
+                    .min = static_cast<float>(statisticAdc1Raw.min()),
+                    .mean = statisticAdc1Raw.mean(),
+                    .deviation = statisticAdc1Raw.deviation(),
                 };
                 // BIN/STAT/ADC1
                 saveStatisticFile(SensorType::Adc1, dataAdc1);
@@ -1167,10 +1204,10 @@ namespace
             if (context.config.sensorMask & SensorMask::Adc2)
             {
                 StatisticData dataAdc2 = {
-                    .max = static_cast<float>(statisticAdc2.max()),
-                    .min = static_cast<float>(statisticAdc2.min()),
-                    .mean = statisticAdc2.mean(),
-                    .deviation = statisticAdc2.deviation(),
+                    .max = static_cast<float>(statisticAdc2Raw.max()),
+                    .min = static_cast<float>(statisticAdc2Raw.min()),
+                    .mean = statisticAdc2Raw.mean(),
+                    .deviation = statisticAdc2Raw.deviation(),
                 };
                 // BIN/STAT/ADC2
                 saveStatisticFile(SensorType::Adc2, dataAdc2);
@@ -1178,29 +1215,31 @@ namespace
 
             if (context.config.sensorMask & SensorMask::Accel)
             {
+                float accelScaleMs2 = Imu::getAccelScaleMs2();
+
                 StatisticData dataAccelX = {
-                    .max = static_cast<float>(statisticAccX.max()),
-                    .min = static_cast<float>(statisticAccX.min()),
-                    .mean = statisticAccX.mean(),
-                    .deviation = statisticAccX.deviation(),
+                    .max = static_cast<float>(statisticAccXRaw.max()) * accelScaleMs2,
+                    .min = static_cast<float>(statisticAccXRaw.min()) * accelScaleMs2,
+                    .mean = statisticAccXRaw.mean() * accelScaleMs2,
+                    .deviation = statisticAccXRaw.deviation() * accelScaleMs2,
                 };
                 // BIN/STAT/ACC_X
                 saveStatisticFile(SensorType::AccelX, dataAccelX);
 
                 StatisticData dataAccelY = {
-                    .max = static_cast<float>(statisticAccY.max()),
-                    .min = static_cast<float>(statisticAccY.min()),
-                    .mean = statisticAccY.mean(),
-                    .deviation = statisticAccY.deviation(),
+                    .max = static_cast<float>(statisticAccYRaw.max()) * accelScaleMs2,
+                    .min = static_cast<float>(statisticAccYRaw.min()) * accelScaleMs2,
+                    .mean = statisticAccYRaw.mean() * accelScaleMs2,
+                    .deviation = statisticAccYRaw.deviation() * accelScaleMs2,
                 };
                 // BIN/STAT/ACC_Y
                 saveStatisticFile(SensorType::AccelY, dataAccelY);
 
                 StatisticData dataAccelZ = {
-                    .max = static_cast<float>(statisticAccZ.max()),
-                    .min = static_cast<float>(statisticAccZ.min()),
-                    .mean = statisticAccZ.mean(),
-                    .deviation = statisticAccZ.deviation(),
+                    .max = static_cast<float>(statisticAccZRaw.max()) * accelScaleMs2,
+                    .min = static_cast<float>(statisticAccZRaw.min()) * accelScaleMs2,
+                    .mean = statisticAccZRaw.mean() * accelScaleMs2,
+                    .deviation = statisticAccZRaw.deviation() * accelScaleMs2,
                 };
                 // BIN/STAT/ACC_Z
                 saveStatisticFile(SensorType::AccelZ, dataAccelZ);
@@ -1208,29 +1247,31 @@ namespace
 
             if (context.config.sensorMask & SensorMask::Gyro)
             {
+                float gyroScaleRPS = Imu::getGyroScaleRPS();
+
                 StatisticData dataGyroX = {
-                    .max = static_cast<float>(statisticGyroX.max()),
-                    .min = static_cast<float>(statisticGyroX.min()),
-                    .mean = statisticGyroX.mean(),
-                    .deviation = statisticGyroX.deviation(),
+                    .max = static_cast<float>(statisticGyroXRaw.max()) * gyroScaleRPS,
+                    .min = static_cast<float>(statisticGyroXRaw.min()) * gyroScaleRPS,
+                    .mean = statisticGyroXRaw.mean() * gyroScaleRPS,
+                    .deviation = statisticGyroXRaw.deviation() * gyroScaleRPS,
                 };
                 // BIN/STAT/GYR_X
                 saveStatisticFile(SensorType::GyroX, dataGyroX);
 
                 StatisticData dataGyroY = {
-                    .max = static_cast<float>(statisticGyroY.max()),
-                    .min = static_cast<float>(statisticGyroY.min()),
-                    .mean = statisticGyroY.mean(),
-                    .deviation = statisticGyroY.deviation(),
+                    .max = static_cast<float>(statisticGyroYRaw.max()) * gyroScaleRPS,
+                    .min = static_cast<float>(statisticGyroYRaw.min()) * gyroScaleRPS,
+                    .mean = statisticGyroYRaw.mean() * gyroScaleRPS,
+                    .deviation = statisticGyroYRaw.deviation() * gyroScaleRPS,
                 };
                 // BIN/STAT/GYR_Y
                 saveStatisticFile(SensorType::GyroY, dataGyroY);
 
                 StatisticData dataGyroZ = {
-                    .max = static_cast<float>(statisticGyroZ.max()),
-                    .min = static_cast<float>(statisticGyroZ.min()),
-                    .mean = statisticGyroZ.mean(),
-                    .deviation = statisticGyroZ.deviation(),
+                    .max = static_cast<float>(statisticGyroZRaw.max()) * gyroScaleRPS,
+                    .min = static_cast<float>(statisticGyroZRaw.min()) * gyroScaleRPS,
+                    .mean = statisticGyroZRaw.mean() * gyroScaleRPS,
+                    .deviation = statisticGyroZRaw.deviation() * gyroScaleRPS,
                 };
                 // BIN/STAT/GYR_Z
                 saveStatisticFile(SensorType::GyroZ, dataGyroZ);
@@ -1239,19 +1280,19 @@ namespace
             if (context.config.sensorMask & SensorMask::Angle)
             {
                 StatisticData dataAngleRoll = {
-                    .max = statisticRoll.max(),
-                    .min = statisticRoll.min(),
-                    .mean = statisticRoll.mean(),
-                    .deviation = statisticRoll.deviation(),
+                    .max = statisticRollDeg.max(),
+                    .min = statisticRollDeg.min(),
+                    .mean = statisticRollDeg.mean(),
+                    .deviation = statisticRollDeg.deviation(),
                 };
                 // BIN/STAT/ROLL
                 saveStatisticFile(SensorType::Roll, dataAngleRoll);
 
                 StatisticData dataAnglePitch = {
-                    .max = statisticPitch.max(),
-                    .min = statisticPitch.min(),
-                    .mean = statisticPitch.mean(),
-                    .deviation = statisticPitch.deviation(),
+                    .max = statisticPitchDeg.max(),
+                    .min = statisticPitchDeg.min(),
+                    .mean = statisticPitchDeg.mean(),
+                    .deviation = statisticPitchDeg.deviation(),
                 };
                 // BIN/STAT/PITCH
                 saveStatisticFile(SensorType::Pitch, dataAnglePitch);
@@ -1260,10 +1301,10 @@ namespace
             if (context.config.sensorMask & SensorMask::AccelResult)
             {
                 StatisticData dataAccelResult = {
-                    .max = statisticAccResult.max(),
-                    .min = statisticAccResult.min(),
-                    .mean = statisticAccResult.mean(),
-                    .deviation = statisticAccResult.deviation(),
+                    .max = statisticAccResultMs2.max(),
+                    .min = statisticAccResultMs2.min(),
+                    .mean = statisticAccResultMs2.mean(),
+                    .deviation = statisticAccResultMs2.deviation(),
                 };
                 // BIN/STAT/ACC_RES
                 saveStatisticFile(SensorType::AccelResult, dataAccelResult);
@@ -1305,18 +1346,18 @@ namespace
                 sdFile.println("Channel Units,raw_12bit");
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", statisticAdc1.max());
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticAdc1Raw.max());
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", statisticAdc1.min());
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticAdc1Raw.min());
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", statisticAdc1.mean());
+                    snprintf(string, sizeof(string), "Mean,%G", statisticAdc1Raw.mean());
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAdc1.deviation());
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAdc1Raw.deviation());
                     sdFile.println(string);
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
                 {
-                    const PsdResult &psdResult = psdAdc1.getResult();
+                    const PsdResult &psdResult = psdAdc1Raw.getResult();
                     snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
                              psdResult.coreFrequency, psdResult.coreAmplitude);
                     sdFile.println(string);
@@ -1338,18 +1379,18 @@ namespace
                 sdFile.println("Channel Units,raw_12bit");
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", statisticAdc2.max());
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticAdc2Raw.max());
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", statisticAdc2.min());
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticAdc2Raw.min());
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", statisticAdc2.mean());
+                    snprintf(string, sizeof(string), "Mean,%G", statisticAdc2Raw.mean());
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAdc2.deviation());
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAdc2Raw.deviation());
                     sdFile.println(string);
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
                 {
-                    const PsdResult &psdResult = psdAdc2.getResult();
+                    const PsdResult &psdResult = psdAdc2Raw.getResult();
                     snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
                              psdResult.coreFrequency, psdResult.coreAmplitude);
                     sdFile.println(string);
@@ -1372,18 +1413,18 @@ namespace
                 float accelScaleMs2 = Imu::getAccelScaleMs2();
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", statisticAccX.max() * accelScaleMs2);
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticAccXRaw.max() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", statisticAccX.min() * accelScaleMs2);
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticAccXRaw.min() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", statisticAccX.mean() * accelScaleMs2);
+                    snprintf(string, sizeof(string), "Mean,%G", statisticAccXRaw.mean() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAccX.deviation() * accelScaleMs2);
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAccXRaw.deviation() * accelScaleMs2);
                     sdFile.println(string);
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
                 {
-                    const PsdResult &psdResult = psdAccX.getResult();
+                    const PsdResult &psdResult = psdAccXMs2.getResult();
                     snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
                              psdResult.coreFrequency, psdResult.coreAmplitude);
                     sdFile.println(string);
@@ -1402,18 +1443,18 @@ namespace
                 sdFile.println("Channel Units,m/s^2");
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", statisticAccY.max() * accelScaleMs2);
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticAccYRaw.max() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", statisticAccY.min() * accelScaleMs2);
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticAccYRaw.min() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", statisticAccY.mean() * accelScaleMs2);
+                    snprintf(string, sizeof(string), "Mean,%G", statisticAccYRaw.mean() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAccY.deviation() * accelScaleMs2);
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAccYRaw.deviation() * accelScaleMs2);
                     sdFile.println(string);
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
                 {
-                    const PsdResult &psdResult = psdAccY.getResult();
+                    const PsdResult &psdResult = psdAccYMs2.getResult();
                     snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
                              psdResult.coreFrequency, psdResult.coreAmplitude);
                     sdFile.println(string);
@@ -1432,13 +1473,13 @@ namespace
                 sdFile.println("Channel Units,m/s^2");
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", statisticAccZ.max() * accelScaleMs2);
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticAccZRaw.max() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", statisticAccZ.min() * accelScaleMs2);
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticAccZRaw.min() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", statisticAccZ.mean() * accelScaleMs2);
+                    snprintf(string, sizeof(string), "Mean,%G", statisticAccZRaw.mean() * accelScaleMs2);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAccZ.deviation() * accelScaleMs2);
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAccZRaw.deviation() * accelScaleMs2);
                     sdFile.println(string);
                 }
                 sdFile.println(""); // End of channel
@@ -1451,18 +1492,18 @@ namespace
                 float gyroScaleRPS = Imu::getGyroScaleRPS();
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", statisticGyroX.max() * gyroScaleRPS);
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticGyroXRaw.max() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", statisticGyroX.min() * gyroScaleRPS);
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticGyroXRaw.min() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", statisticGyroX.mean() * gyroScaleRPS);
+                    snprintf(string, sizeof(string), "Mean,%G", statisticGyroXRaw.mean() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticGyroX.deviation() * gyroScaleRPS);
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticGyroXRaw.deviation() * gyroScaleRPS);
                     sdFile.println(string);
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
                 {
-                    const PsdResult &psdResult = psdGyroX.getResult();
+                    const PsdResult &psdResult = psdGyroXRPS.getResult();
                     snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
                              psdResult.coreFrequency, psdResult.coreAmplitude);
                     sdFile.println(string);
@@ -1481,18 +1522,18 @@ namespace
                 sdFile.println("Channel Units,rad/s");
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", statisticGyroY.max() * gyroScaleRPS);
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticGyroYRaw.max() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", statisticGyroY.min() * gyroScaleRPS);
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticGyroYRaw.min() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", statisticGyroY.mean() * gyroScaleRPS);
+                    snprintf(string, sizeof(string), "Mean,%G", statisticGyroYRaw.mean() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticGyroY.deviation() * gyroScaleRPS);
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticGyroYRaw.deviation() * gyroScaleRPS);
                     sdFile.println(string);
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
                 {
-                    const PsdResult &psdResult = psdGyroY.getResult();
+                    const PsdResult &psdResult = psdGyroYRPS.getResult();
                     snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
                              psdResult.coreFrequency, psdResult.coreAmplitude);
                     sdFile.println(string);
@@ -1511,13 +1552,13 @@ namespace
                 sdFile.println("Channel Units,rad/s");
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", statisticGyroZ.max() * gyroScaleRPS);
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticGyroZRaw.max() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", statisticGyroZ.min() * gyroScaleRPS);
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticGyroZRaw.min() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", statisticGyroZ.mean() * gyroScaleRPS);
+                    snprintf(string, sizeof(string), "Mean,%G", statisticGyroZRaw.mean() * gyroScaleRPS);
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticGyroZ.deviation() * gyroScaleRPS);
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticGyroZRaw.deviation() * gyroScaleRPS);
                     sdFile.println(string);
                 }
                 sdFile.println(""); // End of channel
@@ -1529,13 +1570,13 @@ namespace
                 sdFile.println("Channel Units,deg");
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", statisticRoll.max());
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticRollDeg.max());
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", statisticRoll.min());
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticRollDeg.min());
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", statisticRoll.mean());
+                    snprintf(string, sizeof(string), "Mean,%G", statisticRollDeg.mean());
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticRoll.deviation());
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticRollDeg.deviation());
                     sdFile.println(string);
                 }
                 sdFile.println(""); // End of channel
@@ -1544,13 +1585,13 @@ namespace
                 sdFile.println("Channel Units,deg");
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", statisticPitch.max());
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticPitchDeg.max());
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", statisticPitch.min());
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticPitchDeg.min());
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", statisticPitch.mean());
+                    snprintf(string, sizeof(string), "Mean,%G", statisticPitchDeg.mean());
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticPitch.deviation());
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticPitchDeg.deviation());
                     sdFile.println(string);
                 }
                 sdFile.println(""); // End of channel
@@ -1562,18 +1603,18 @@ namespace
                 sdFile.println("Channel Units,m/s^2");
                 if (context.config.dataTypeMask & DataTypeMask::Statistic)
                 {
-                    snprintf(string, sizeof(string), "Maximum,%G", statisticAccResult.max());
+                    snprintf(string, sizeof(string), "Maximum,%G", statisticAccResultMs2.max());
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Minimum,%G", statisticAccResult.min());
+                    snprintf(string, sizeof(string), "Minimum,%G", statisticAccResultMs2.min());
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Mean,%G", statisticAccResult.mean());
+                    snprintf(string, sizeof(string), "Mean,%G", statisticAccResultMs2.mean());
                     sdFile.println(string);
-                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAccResult.deviation());
+                    snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAccResultMs2.deviation());
                     sdFile.println(string);
                 }
                 if (context.config.dataTypeMask & DataTypeMask::Psd)
                 {
-                    const PsdResult &psdResult = psdAccResult.getResult();
+                    const PsdResult &psdResult = psdAccResultMs2.getResult();
                     snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
                              psdResult.coreFrequency, psdResult.coreAmplitude);
                     sdFile.println(string);
