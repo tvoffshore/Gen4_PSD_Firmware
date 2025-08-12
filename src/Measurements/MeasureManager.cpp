@@ -289,6 +289,9 @@ namespace
     Measurements::PSD<float> psdGyroXRPS;
     Measurements::PSD<float> psdGyroYRPS;
     Measurements::PSD<float> psdGyroZRPS;
+    // PSD measurements for angle axises Roll/Pitch, degrees
+    Measurements::PSD<float> psdRollDeg;
+    Measurements::PSD<float> psdPitchDeg;
     // PSD measurements for accelerometer resultant direction, m/s^2
     Measurements::PSD<float> psdAccResultMs2;
 
@@ -653,6 +656,11 @@ namespace
                 psdGyroYRPS.setup(context.segmentSize, context.config.sampleFrequency);
                 psdGyroZRPS.setup(context.segmentSize, context.config.sampleFrequency);
             }
+            if (context.config.sensorMask & SensorMask::Angle)
+            {
+                psdRollDeg.setup(context.segmentSize, context.config.sampleFrequency);
+                psdPitchDeg.setup(context.segmentSize, context.config.sampleFrequency);
+            }
             if (context.config.sensorMask & SensorMask::AccelResult)
             {
                 psdAccResultMs2.setup(context.segmentSize, context.config.sampleFrequency);
@@ -876,6 +884,11 @@ namespace
 
                 convertImuRawToUnits(pSamplesGyroZRaw, imuSamplesUnits, gyroScaleRPS, context.segmentSize);
                 psdGyroZRPS.computeSegment(imuSamplesUnits);
+            }
+            if (context.config.sensorMask & SensorMask::Angle)
+            {
+                psdRollDeg.computeSegment(pSamplesRollDeg);
+                psdPitchDeg.computeSegment(pSamplesPitchDeg);
             }
             if (context.config.sensorMask & SensorMask::AccelResult)
             {
@@ -1194,6 +1207,15 @@ namespace
 
                 // BIN/PSD/GYR_Z
                 savePsdFile(SensorType::GyroZ, psdGyroZRPS.getResult(), resultPoints);
+            }
+
+            if (context.config.sensorMask & SensorMask::Angle)
+            {
+                // BIN/PSD/ROLL
+                savePsdFile(SensorType::Roll, psdRollDeg.getResult(), resultPoints);
+                
+                // BIN/PSD/PITCH
+                savePsdFile(SensorType::Pitch, psdPitchDeg.getResult(), resultPoints);
             }
 
             if (context.config.sensorMask & SensorMask::AccelResult)
@@ -1625,6 +1647,21 @@ namespace
                     snprintf(string, sizeof(string), "Standard Deviation,%G", statisticRollDeg.deviation());
                     sdFile.println(string);
                 }
+                if (context.config.dataTypeMask & DataTypeMask::Psd)
+                {
+                    const PsdResult &psdResult = psdRollDeg.getResult();
+                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
+                             psdResult.coreFrequency, psdResult.coreAmplitude);
+                    sdFile.println(string);
+                    snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
+                    sdFile.print(string);
+                    for (size_t idx = 0; idx < resultPoints; idx++)
+                    {
+                        snprintf(string, sizeof(string), ",%G", psdResult.bins[idx]);
+                        sdFile.print(string);
+                    }
+                    sdFile.println(""); // End of PSD
+                }
                 sdFile.println(""); // End of channel
 
                 sdFile.println("Channel Name,PITCH");
@@ -1639,6 +1676,21 @@ namespace
                     sdFile.println(string);
                     snprintf(string, sizeof(string), "Standard Deviation,%G", statisticPitchDeg.deviation());
                     sdFile.println(string);
+                }
+                if (context.config.dataTypeMask & DataTypeMask::Psd)
+                {
+                    const PsdResult &psdResult = psdPitchDeg.getResult();
+                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
+                             psdResult.coreFrequency, psdResult.coreAmplitude);
+                    sdFile.println(string);
+                    snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
+                    sdFile.print(string);
+                    for (size_t idx = 0; idx < resultPoints; idx++)
+                    {
+                        snprintf(string, sizeof(string), ",%G", psdResult.bins[idx]);
+                        sdFile.print(string);
+                    }
+                    sdFile.println(""); // End of PSD
                 }
                 sdFile.println(""); // End of channel
             }
