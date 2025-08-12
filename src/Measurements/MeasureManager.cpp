@@ -184,7 +184,7 @@ namespace
 #pragma pack(pop)
 
     /**
-     * Samples buffer structure
+     * Samples ping-pong buffer structure
      */
     struct Buffer
     {
@@ -284,9 +284,11 @@ namespace
     // PSD measurements for accelerometer axises X/Y, m/s^2
     Measurements::PSD<float> psdAccXMs2;
     Measurements::PSD<float> psdAccYMs2;
+    Measurements::PSD<float> psdAccZMs2;
     // PSD measurements for gyroscope axises X/Y, RPS
     Measurements::PSD<float> psdGyroXRPS;
     Measurements::PSD<float> psdGyroYRPS;
+    Measurements::PSD<float> psdGyroZRPS;
     // PSD measurements for accelerometer resultant direction, m/s^2
     Measurements::PSD<float> psdAccResultMs2;
 
@@ -643,11 +645,13 @@ namespace
             {
                 psdAccXMs2.setup(context.segmentSize, context.config.sampleFrequency);
                 psdAccYMs2.setup(context.segmentSize, context.config.sampleFrequency);
+                psdAccZMs2.setup(context.segmentSize, context.config.sampleFrequency);
             }
             if (context.config.sensorMask & SensorMask::Gyro)
             {
                 psdGyroXRPS.setup(context.segmentSize, context.config.sampleFrequency);
                 psdGyroYRPS.setup(context.segmentSize, context.config.sampleFrequency);
+                psdGyroZRPS.setup(context.segmentSize, context.config.sampleFrequency);
             }
             if (context.config.sensorMask & SensorMask::AccelResult)
             {
@@ -856,6 +860,9 @@ namespace
 
                 convertImuRawToUnits(pSamplesAccYRaw, imuSamplesUnits, accelScaleMs2, context.segmentSize);
                 psdAccYMs2.computeSegment(imuSamplesUnits);
+
+                convertImuRawToUnits(pSamplesAccZRaw, imuSamplesUnits, accelScaleMs2, context.segmentSize);
+                psdAccZMs2.computeSegment(imuSamplesUnits);
             }
             if (context.config.sensorMask & SensorMask::Gyro)
             {
@@ -866,6 +873,9 @@ namespace
 
                 convertImuRawToUnits(pSamplesGyroYRaw, imuSamplesUnits, gyroScaleRPS, context.segmentSize);
                 psdGyroYRPS.computeSegment(imuSamplesUnits);
+
+                convertImuRawToUnits(pSamplesGyroZRaw, imuSamplesUnits, gyroScaleRPS, context.segmentSize);
+                psdGyroZRPS.computeSegment(imuSamplesUnits);
             }
             if (context.config.sensorMask & SensorMask::AccelResult)
             {
@@ -1169,6 +1179,9 @@ namespace
 
                 // BIN/PSD/ACC_Y
                 savePsdFile(SensorType::AccelY, psdAccYMs2.getResult(), resultPoints);
+
+                // BIN/PSD/ACC_Z
+                savePsdFile(SensorType::AccelZ, psdAccZMs2.getResult(), resultPoints);
             }
 
             if (context.config.sensorMask & SensorMask::Gyro)
@@ -1178,6 +1191,9 @@ namespace
 
                 // BIN/PSD/GYR_Y
                 savePsdFile(SensorType::GyroY, psdGyroYRPS.getResult(), resultPoints);
+
+                // BIN/PSD/GYR_Z
+                savePsdFile(SensorType::GyroZ, psdGyroZRPS.getResult(), resultPoints);
             }
 
             if (context.config.sensorMask & SensorMask::AccelResult)
@@ -1482,6 +1498,21 @@ namespace
                     snprintf(string, sizeof(string), "Standard Deviation,%G", statisticAccZRaw.deviation() * accelScaleMs2);
                     sdFile.println(string);
                 }
+                if (context.config.dataTypeMask & DataTypeMask::Psd)
+                {
+                    const PsdResult &psdResult = psdAccZMs2.getResult();
+                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
+                             psdResult.coreFrequency, psdResult.coreAmplitude);
+                    sdFile.println(string);
+                    snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
+                    sdFile.print(string);
+                    for (size_t idx = 0; idx < resultPoints; idx++)
+                    {
+                        snprintf(string, sizeof(string), ",%G", psdResult.bins[idx]);
+                        sdFile.print(string);
+                    }
+                    sdFile.println(""); // End of PSD
+                }
                 sdFile.println(""); // End of channel
             }
 
@@ -1560,6 +1591,21 @@ namespace
                     sdFile.println(string);
                     snprintf(string, sizeof(string), "Standard Deviation,%G", statisticGyroZRaw.deviation() * gyroScaleRPS);
                     sdFile.println(string);
+                }
+                if (context.config.dataTypeMask & DataTypeMask::Psd)
+                {
+                    const PsdResult &psdResult = psdGyroZRPS.getResult();
+                    snprintf(string, sizeof(string), "Core Frequency (%dpt PSD),%G,%G", context.segmentSize,
+                             psdResult.coreFrequency, psdResult.coreAmplitude);
+                    sdFile.println(string);
+                    snprintf(string, sizeof(string), "PSD_%d_%d", resultPoints, context.segmentSize);
+                    sdFile.print(string);
+                    for (size_t idx = 0; idx < resultPoints; idx++)
+                    {
+                        snprintf(string, sizeof(string), ",%G", psdResult.bins[idx]);
+                        sdFile.print(string);
+                    }
+                    sdFile.println(""); // End of PSD
                 }
                 sdFile.println(""); // End of channel
             }
