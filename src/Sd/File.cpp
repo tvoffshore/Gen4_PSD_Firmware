@@ -201,9 +201,13 @@ bool SD::File::create(const char *directory, const char *fileName, const char *e
         {
             // File was successfully created/opened, add timestamp
             timestamp((oFlags & O_CREAT) ? T_CREATE | T_ACCESS : T_ACCESS);
-        }
 
-        LOG_INFO("File \"%s\" %s %s on SD", _path, _file ? "is" : "isn't", (oFlags & O_CREAT) ? "created" : "opened");
+            LOG_INFO("File \"%s\" is %s on SD", _path, (oFlags & O_CREAT) ? "created" : "opened");
+        }
+        else
+        {
+            LOG_ERROR("File \"%s\" isn't %s on SD", _path, (oFlags & O_CREAT) ? "created" : "opened");
+        }
     }
     else
     {
