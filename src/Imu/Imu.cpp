@@ -27,7 +27,8 @@
 static const int16_t testSeriesX[32] = {
 #include "data/test_series_x.inl" // Or generate via Python script
 };
-static size_t testIndex = 0;
+static size_t testIndexAccel = 0;
+static size_t testIndexGyro = 0;
 #endif // IMU_TEST_MODE
 
 using namespace Imu;
@@ -237,7 +238,8 @@ bool Imu::stop(Module module)
  */
 bool Imu::read(Module module, Data &data)
 {
-#if IMU_TEST_MODE
+#ifdef IMU_TEST_MODE
+    size_t &testIndex = (module == Module::Accel) ? testIndexAccel : testIndexGyro;
     size_t idx = testIndex % (sizeof(testSeriesX) / sizeof(*testSeriesX));
 
     // Feed synthetic test data regardless of IMU state
